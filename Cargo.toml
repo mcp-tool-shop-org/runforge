@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["crates/runforge-core", "crates/runforge"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.98.1"
+license = "MIT"
+publish = false
+authors = ["mcp-tool-shop"]
+
+[workspace.lints.rust]
+unused_must_use = "deny"

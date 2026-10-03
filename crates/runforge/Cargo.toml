@@ -1,0 +1,19 @@
+[package]
+name = "runforge"
+description = "Windows bench for backpropagate training runs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow = "1"
+eframe = "0.36"
+egui_plot = "0.37"
+rfd = "0.15"
+runforge-core = { path = "../runforge-core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,56 @@
+# Knowledge-base allow list for a shipped MIT/Apache product.
+# The eframe 0.36 graph needs more. Those stay per-crate exceptions.
+# The global list is not widened. MPL-2.0 is not allowed.
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unlicense", "BSD-1-Clause", "0BSD", "Zlib"]
+confidence-threshold = 0.95
+exceptions = [
+    # tiny-skia, reached through winit's Linux window decorations.
+    { crate = "arrayref", allow = ["BSD-2-Clause"] },
+    { crate = "tiny-skia", allow = ["BSD-3-Clause"] },
+    { crate = "tiny-skia-path", allow = ["BSD-3-Clause"] },
+    # Windows clipboard, reached through egui-winit and arboard.
+    { crate = "clipboard-win", allow = ["BSL-1.0"] },
+    { crate = "error-code", allow = ["BSL-1.0"] },
+    # Dynamic loading, reached through wgpu.
+    { crate = "libloading", allow = ["ISC"] },
+    # egui's bundled fonts. The crate is also MIT OR Apache-2.0.
+    { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+    # Unicode data, reached through idna, url, and unicode-ident.
+    # unicode-ident is MIT OR Apache-2.0 AND Unicode-3.0.
+    { crate = "icu_collections", allow = ["Unicode-3.0"] },
+    { crate = "icu_locale_core", allow = ["Unicode-3.0"] },
+    { crate = "icu_normalizer", allow = ["Unicode-3.0"] },
+    { crate = "icu_normalizer_data", allow = ["Unicode-3.0"] },
+    { crate = "icu_properties", allow = ["Unicode-3.0"] },
+    { crate = "icu_properties_data", allow = ["Unicode-3.0"] },
+    { crate = "icu_provider", allow = ["Unicode-3.0"] },
+    { crate = "litemap", allow = ["Unicode-3.0"] },
+    { crate = "potential_utf", allow = ["Unicode-3.0"] },
+    { crate = "tinystr", allow = ["Unicode-3.0"] },
+    { crate = "unicode-ident", allow = ["Unicode-3.0"] },
+    { crate = "writeable", allow = ["Unicode-3.0"] },
+    { crate = "yoke", allow = ["Unicode-3.0"] },
+    { crate = "yoke-derive", allow = ["Unicode-3.0"] },
+    { crate = "zerofrom", allow = ["Unicode-3.0"] },
+    { crate = "zerofrom-derive", allow = ["Unicode-3.0"] },
+    { crate = "zerotrie", allow = ["Unicode-3.0"] },
+    { crate = "zerovec", allow = ["Unicode-3.0"] },
+    { crate = "zerovec-derive", allow = ["Unicode-3.0"] },
+]
+
+[advisories]
+ignore = [
+    # ttf-parser has no safe upgrade. winit pulls it through sctk-adwaita
+    # for Linux window decorations. RunForge does not call it.
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser, transitive through winit, no safe upgrade" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
