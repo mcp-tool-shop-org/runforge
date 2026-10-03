@@ -131,10 +131,10 @@ The GUI pins match the ScalarScope review as read on 2026-10-03 (`eframe` 0.36, 
 
 `Cargo.lock` is committed. CI builds with `--locked`.
 
-Tests live on `runforge-core` and do not open a window. The fixtures cover: a failed entry with an empty `loss_history`, a completed entry whose curve is drawn without appending `final_loss`, an entry with `eval`, an unknown key that survives export, a null inside `loss_history` that becomes a gap, a missing `run_id` that is skipped, a file that is not an array, a duplicate key that refuses the file, and a best-loss pick that puts a non-finite loss last. `cargo test` is the check. A screenshot of the window is not that check.
+The fixtures cover: a failed entry with an empty `loss_history`, a completed entry whose curve is drawn without appending `final_loss`, an entry with `eval`, an unknown key that survives export, a null inside `loss_history` that becomes a gap, a missing `run_id` that is skipped, a file that is not an array, a duplicate key that refuses the file, and a best-loss pick that puts a non-finite loss last. The window is exercised headlessly. Codecov enforces 90% line coverage on the project and on the patch. The operating-system file dialog and the packaged-process success path stay uncalled. A screenshot of the window is not the check.
 
 ## Production gate
 
-The dogfood swarm runs on this repository after slice 1 is in it and `cargo test` is green. It does not run on this file. Phase 10 is full treatment, including the identity scan, and it ends with an unsigned `2.0.0.0` package whose identity matches the table above. Submission to Partner Center stays with the operator.
+The dogfood swarm runs on this repository after slice 1 is in it and the coverage gate is green. It does not run on this file. Phase 10 is full treatment, including the identity scan, and it ends with an unsigned `2.0.0.0` package whose identity matches the table above. Submission to Partner Center stays with the operator.
 
 The swarm is not a substitute for the fixture list. A run that never loads a `run_history.json` has not seen the product.

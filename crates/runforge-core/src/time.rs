@@ -157,6 +157,41 @@ mod tests {
     #[test]
     fn bad_text_is_not_a_time() {
         assert!(timestamp_ord("not-a-time").is_none());
+        assert!(timestamp_ord("").is_none());
+        assert!(timestamp_ord("   ").is_none());
         assert!(timestamp_ord("2026-02-31T00:00:00").is_none());
+        assert!(timestamp_ord("2025-02-29T00:00:00").is_none());
+        assert!(timestamp_ord("2026-13-01T00:00:00").is_none());
+        assert!(timestamp_ord("2026-00-01T00:00:00").is_none());
+        assert!(timestamp_ord("2026-05-00T00:00:00").is_none());
+        assert!(timestamp_ord("2026-05-21T24:00:00").is_none());
+        assert!(timestamp_ord("2026-05-21T00:60:00").is_none());
+        assert!(timestamp_ord("2026-05-21T00:00:61").is_none());
+        assert!(timestamp_ord("2026-05-21T00:00:00+25:00").is_none());
+        assert!(timestamp_ord("2026-05-21T00:00:00+99").is_none());
+        assert!(timestamp_ord("2026-05-21").is_none());
+        assert!(timestamp_ord("2026-05-21T00:00").is_none());
+        assert!(timestamp_ord("2026-05-21T00:00:00.abc").is_none());
+        assert!(timestamp_ord("2026-05-21T").is_none());
+        assert!(timestamp_ord("2026-05-21T-01:00").is_none());
+    }
+
+    #[test]
+    fn zones_leap_day_and_fractions_share_one_clock() {
+        let spaced = timestamp_ord("2026-05-21 04:54:16").unwrap();
+        let lower_t = timestamp_ord("2026-05-21t04:54:16").unwrap();
+        let z = timestamp_ord("2026-05-21T04:54:16z").unwrap();
+        assert_eq!(spaced, lower_t);
+        assert_eq!(lower_t, z);
+        let west = timestamp_ord("2026-05-21T03:54:16-01:00").unwrap();
+        let compact = timestamp_ord("2026-05-21T03:54:16-0100").unwrap();
+        assert_eq!(west, z);
+        assert_eq!(compact, z);
+        assert!(timestamp_ord("2024-02-29T00:00:00").is_some());
+        assert!(timestamp_ord("2026-05-21T00:00:60").is_some());
+        let short = timestamp_ord("2026-05-21T00:00:00.1").unwrap();
+        let long = timestamp_ord("2026-05-21T00:00:00.1000009").unwrap();
+        assert_eq!(short, long);
+        assert!(timestamp_ord("2026-05-21T00:00:01").unwrap() > short);
     }
 }

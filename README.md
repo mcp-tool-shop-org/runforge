@@ -12,10 +12,11 @@ Rust 1.98.1, edition 2024. The toolchain file pins it.
 
 ```bash
 cargo test --locked --workspace
+cargo llvm-cov --locked --workspace --all-targets --lcov --output-path lcov.info --remap-path-prefix --fail-under-lines 90
 cargo run -p runforge --locked
 ```
 
-`cargo test` does not open a window. The check is the fixture list in `crates/runforge-core`.
+CI runs the coverage command and uploads `lcov.info`. Codecov fails the status when line coverage is under 90%. The file dialog is not opened by the tests.
 
 ## Store
 

@@ -126,3 +126,92 @@ impl<'de> Visitor<'de> for StrictVisitor {
         Ok(Value::Object(object))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Strict, StrictVisitor};
+    use serde::de::{DeserializeSeed, Visitor};
+    use serde_json::{Number, Value};
+
+    #[test]
+    fn the_visitor_accepts_every_json_shape() {
+        struct Show;
+        impl std::fmt::Display for Show {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let visitor = StrictVisitor;
+                visitor.expecting(formatter)
+            }
+        }
+        assert_eq!(Show.to_string(), "a JSON value");
+
+        assert_eq!(
+            StrictVisitor.visit_bool::<serde_json::Error>(true).unwrap(),
+            Value::Bool(true)
+        );
+        assert_eq!(
+            StrictVisitor.visit_unit::<serde_json::Error>().unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            StrictVisitor.visit_none::<serde_json::Error>().unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            StrictVisitor
+                .visit_string::<serde_json::Error>("kept".to_string())
+                .unwrap(),
+            Value::String("kept".to_string())
+        );
+        assert_eq!(
+            StrictVisitor.visit_i64::<serde_json::Error>(-3).unwrap(),
+            Value::Number((-3i64).into())
+        );
+        assert_eq!(
+            StrictVisitor.visit_u64::<serde_json::Error>(3).unwrap(),
+            Value::Number(3u64.into())
+        );
+        assert!(matches!(
+            StrictVisitor.visit_f64::<serde_json::Error>(-0.0).unwrap(),
+            Value::Number(_)
+        ));
+        assert!(matches!(
+            StrictVisitor
+                .visit_f64::<serde_json::Error>(f64::NAN)
+                .unwrap(),
+            Value::Null
+        ));
+        assert_eq!(
+            StrictVisitor.visit_i128::<serde_json::Error>(9).unwrap(),
+            Value::Number(Number::from(9i64))
+        );
+        assert!(
+            StrictVisitor
+                .visit_i128::<serde_json::Error>(i128::MAX)
+                .is_err()
+        );
+        assert_eq!(
+            StrictVisitor.visit_u128::<serde_json::Error>(9).unwrap(),
+            Value::Number(Number::from(9u64))
+        );
+        assert!(
+            StrictVisitor
+                .visit_u128::<serde_json::Error>(u128::MAX)
+                .is_err()
+        );
+        assert_eq!(
+            StrictVisitor
+                .visit_str::<serde_json::Error>("kept")
+                .unwrap(),
+            Value::String("kept".to_string())
+        );
+        let mut inner = serde_json::Deserializer::from_str("true");
+        assert_eq!(
+            StrictVisitor.visit_some(&mut inner).unwrap(),
+            Value::Bool(true)
+        );
+
+        let mut deserializer = serde_json::Deserializer::from_str("[true, null]");
+        let value = Strict.deserialize(&mut deserializer).unwrap();
+        assert_eq!(value, serde_json::json!([true, null]));
+    }
+}

@@ -31,3 +31,12 @@ fn prefs_dir() -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir());
     choose_prefs_dir(store::packaged_local_state().as_deref(), &exe_dir)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_prefs_dir_is_absolute() {
+        let dir = super::prefs_dir();
+        assert!(dir.is_absolute());
+    }
+}

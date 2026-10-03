@@ -1,6 +1,6 @@
 //! Store package LocalState. An unpackaged process does not use this path.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The running package's LocalState folder, when Windows says this process is packaged.
 pub fn packaged_local_state() -> Option<PathBuf> {
@@ -17,11 +17,32 @@ pub fn packaged_local_state() -> Option<PathBuf> {
 #[cfg(windows)]
 fn windows_local_state() -> Option<PathBuf> {
     let family = package_family_name()?;
+    let local = local_app_data()?;
+    local_state_dir(&family, &local)
+}
+
+/// LocalState for one package family. A family that could escape the Packages folder is refused.
+pub(crate) fn local_state_dir(family: &str, local_app_data: &Path) -> Option<PathBuf> {
     if family.is_empty() || family.contains('\\') || family.contains('/') || family.contains("..") {
         return None;
     }
-    let local = local_app_data()?;
-    Some(local.join("Packages").join(family).join("LocalState"))
+    Some(
+        local_app_data
+            .join("Packages")
+            .join(family)
+            .join("LocalState"),
+    )
+}
+
+fn family_from_buffer(status: i32, buffer: &[u16]) -> Option<String> {
+    if status != 0 {
+        return None;
+    }
+    let end = buffer
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(buffer.len());
+    String::from_utf16(&buffer[..end]).ok()
 }
 
 #[cfg(windows)]
@@ -39,14 +60,7 @@ fn package_family_name() -> Option<String> {
         }
         let mut buffer = vec![0u16; length as usize];
         let second = GetCurrentPackageFamilyName(&mut length, buffer.as_mut_ptr());
-        if second != 0 {
-            return None;
-        }
-        let end = buffer
-            .iter()
-            .position(|unit| *unit == 0)
-            .unwrap_or(buffer.len());
-        String::from_utf16(&buffer[..end]).ok()
+        family_from_buffer(second, &buffer)
     }
 }
 
@@ -91,5 +105,51 @@ fn local_app_data() -> Option<PathBuf> {
         let text = String::from_utf16(std::slice::from_raw_parts(raw, length)).ok();
         CoTaskMemFree(raw.cast());
         text.map(PathBuf::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{family_from_buffer, local_state_dir, packaged_local_state};
+    use std::path::Path;
+
+    #[test]
+    fn an_unpackaged_process_has_no_local_state() {
+        assert!(packaged_local_state().is_none());
+    }
+
+    #[test]
+    fn a_family_that_could_escape_packages_is_refused() {
+        let local = Path::new("Local");
+        assert!(local_state_dir("", local).is_none());
+        assert!(local_state_dir(r"a\b", local).is_none());
+        assert!(local_state_dir("a/b", local).is_none());
+        assert!(local_state_dir("a/../b", local).is_none());
+        let path = local_state_dir("mcp-tool-shop.RunForge-Desktop_yn6b8xqrexa5j", local).unwrap();
+        assert_eq!(
+            path,
+            Path::new("Local")
+                .join("Packages")
+                .join("mcp-tool-shop.RunForge-Desktop_yn6b8xqrexa5j")
+                .join("LocalState")
+        );
+    }
+
+    #[test]
+    fn the_family_buffer_stops_at_the_nul() {
+        assert!(family_from_buffer(1, &[b'a' as u16, 0]).is_none());
+        assert_eq!(
+            family_from_buffer(0, &[b'a' as u16, b'b' as u16, 0, b'c' as u16]).as_deref(),
+            Some("ab")
+        );
+        assert_eq!(family_from_buffer(0, &[b'a' as u16]).as_deref(), Some("a"));
+        assert!(family_from_buffer(0, &[0xD800]).is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn local_app_data_is_an_absolute_folder() {
+        let path = super::local_app_data();
+        assert!(path.is_some_and(|path| path.is_absolute()));
     }
 }

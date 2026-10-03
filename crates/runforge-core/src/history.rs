@@ -243,7 +243,7 @@ fn project_entry(file_index: usize, item: Value) -> Option<RunEntry> {
         started_at,
         completed_at: text_of(map.get("completed_at")),
         duration_seconds: map.get("duration_seconds").and_then(finite_f64),
-        steps: map.get("steps").map(number_text).unwrap_or_default(),
+        steps: text_of(map.get("steps")),
         final_loss: map.get("final_loss").and_then(finite_f64),
         loss,
         hyperparameters: match map.get("hyperparameters") {
@@ -317,15 +317,8 @@ fn schema_version(value: Option<&Value>) -> Option<String> {
 fn text_of(value: Option<&Value>) -> String {
     match value {
         Some(Value::String(text)) => text.clone(),
-        Some(other @ Value::Number(_)) => number_text(other),
+        Some(Value::Number(number)) => number.to_string(),
         Some(Value::Bool(flag)) => flag.to_string(),
-        _ => String::new(),
-    }
-}
-
-fn number_text(value: &Value) -> String {
-    match value {
-        Value::Number(number) => number.to_string(),
         _ => String::new(),
     }
 }
