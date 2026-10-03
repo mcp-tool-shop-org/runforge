@@ -1,6 +1,10 @@
 //! The window. It draws what `runforge-core` already decided.
+//!
+//! Train, Eval, and Export model start an already-installed `backprop`. The trainer is not in
+//! this package.
 
-use std::path::PathBuf;
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
@@ -8,6 +12,12 @@ use runforge_core::{
     EvalSummary, History, HyperDiff, LossSample, Prefs, RunEntry, Theme, VERSION, curve_csv,
     curve_segments, entry_json, finite_points, format_f64, hyperparameter_diffs, list_csv,
     load_folder, read_prefs, write_prefs,
+};
+
+use crate::launch::{
+    ALREADY_RUNNING, LaunchRequest, MISSING_TOOL, NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING,
+    OPEN_FOLDER, SELECT_RUN, Session, eval_args, exit_note, export_args, installed_backprop,
+    remember_line, start_installed, train_args,
 };
 
 const CURVE: Color32 = Color32::from_rgb(0x4e, 0xcd, 0xc4);
@@ -20,6 +30,9 @@ struct Row {
 
 type AskFolder = Box<dyn FnMut(&Prefs) -> Option<PathBuf>>;
 type AskSave = Box<dyn FnMut(&str) -> Option<PathBuf>>;
+type AskData = Box<dyn FnMut() -> Option<PathBuf>>;
+type FindTool = Box<dyn FnMut() -> Option<PathBuf>>;
+type StartCommand = Box<dyn FnMut(LaunchRequest) -> Result<Box<dyn Session>, &'static str>>;
 
 pub struct RunForgeApp {
     prefs_dir: PathBuf,
@@ -31,6 +44,14 @@ pub struct RunForgeApp {
     compare: Option<usize>,
     ask_folder: AskFolder,
     ask_save: AskSave,
+    ask_data: AskData,
+    find_tool: FindTool,
+    start: StartCommand,
+    model: String,
+    data_file: Option<PathBuf>,
+    steps: String,
+    log: VecDeque<String>,
+    session: Option<Box<dyn Session>>,
 }
 
 impl RunForgeApp {
@@ -46,6 +67,14 @@ impl RunForgeApp {
             compare: None,
             ask_folder: Box::new(rfd_folder),
             ask_save: Box::new(rfd_save),
+            ask_data: Box::new(rfd_data),
+            find_tool: Box::new(installed_backprop),
+            start: Box::new(start_installed),
+            model: String::new(),
+            data_file: None,
+            steps: String::new(),
+            log: VecDeque::new(),
+            session: None,
         };
         if let Some(folder) = app.prefs.last_folder.clone() {
             app.load_folder(folder);
@@ -107,6 +136,7 @@ impl RunForgeApp {
 
 impl eframe::App for RunForgeApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_session();
         ui.ctx().set_visuals(match self.prefs.theme {
             Theme::Dark => egui::Visuals::dark(),
             Theme::Light => egui::Visuals::light(),
@@ -121,6 +151,7 @@ impl eframe::App for RunForgeApp {
             ui.label("Open the folder where backpropagate wrote run_history.json.");
             return;
         }
+        egui::Panel::bottom("log").show(ui, |ui| self.log_panel(ui));
         self.bench(ui);
     }
 }
@@ -162,6 +193,75 @@ impl RunForgeApp {
         if let Some(path) = &self.opened_file {
             ui.label(path.display().to_string());
         }
+        if self.history.is_some() {
+            self.launch_form(ui);
+        }
+    }
+
+    fn launch_form(&mut self, ui: &mut egui::Ui) {
+        let missing = (self.find_tool)().is_none();
+        let data_label = self
+            .data_file
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .and_then(|name| name.to_str())
+            .unwrap_or("No data file")
+            .to_string();
+        let mut output_field = self
+            .output_dir()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Model");
+            ui.add(egui::TextEdit::singleline(&mut self.model).desired_width(160.0));
+            ui.label("Data file");
+            ui.label(&data_label);
+            if ui.button("Browse").clicked() {
+                self.on_browse();
+            }
+            ui.label("Steps");
+            ui.add(egui::TextEdit::singleline(&mut self.steps).desired_width(72.0));
+            ui.label("Output folder");
+            ui.add(
+                egui::TextEdit::singleline(&mut output_field)
+                    .desired_width(220.0)
+                    .interactive(false),
+            );
+        });
+        if missing {
+            ui.label(MISSING_TOOL);
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Train").clicked() {
+                self.on_train();
+            }
+            if ui.button("Eval").clicked() {
+                self.on_eval();
+            }
+            if ui.button("Export model").clicked() {
+                self.on_export();
+            }
+            if ui.button("Stop").clicked() {
+                self.on_stop();
+            }
+        });
+    }
+
+    fn log_panel(&self, ui: &mut egui::Ui) {
+        ui.label("Log");
+        egui::ScrollArea::vertical()
+            .max_height(120.0)
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                if self.log.is_empty() {
+                    ui.label("No log yet.");
+                    return;
+                }
+                for line in &self.log {
+                    ui.label(line);
+                }
+            });
     }
 
     fn bench(&mut self, ui: &mut egui::Ui) {
@@ -244,6 +344,143 @@ impl RunForgeApp {
         }
         self.compare = Some(file_index);
     }
+
+    fn poll_session(&mut self) {
+        let (lines, code) = {
+            let Some(session) = self.session.as_mut() else {
+                return;
+            };
+            let mut lines = session.take_lines();
+            let code = session.finished();
+            if code.is_some() {
+                lines.extend(session.take_lines());
+            }
+            (lines, code)
+        };
+        for line in lines {
+            remember_line(&mut self.log, line);
+        }
+        let Some(code) = code else {
+            return;
+        };
+        self.session = None;
+        if let Some(folder) = self.output_dir() {
+            self.load_folder(folder);
+        }
+        if self.note.is_empty() {
+            self.note = exit_note(code);
+        }
+    }
+
+    fn output_dir(&self) -> Option<PathBuf> {
+        self.opened_file
+            .as_ref()
+            .and_then(|path| path.parent())
+            .map(Path::to_path_buf)
+    }
+
+    fn selected_entry(&self) -> Option<RunEntry> {
+        let history = self.history.as_ref()?;
+        let index = self.selected?;
+        history.get(index).cloned()
+    }
+
+    fn prepare(&mut self) -> Result<(PathBuf, PathBuf), &'static str> {
+        if self.session.is_some() {
+            return Err(ALREADY_RUNNING);
+        }
+        let Some(program) = (self.find_tool)() else {
+            return Err(MISSING_TOOL);
+        };
+        let Some(output) = self.output_dir() else {
+            return Err(OPEN_FOLDER);
+        };
+        Ok((program, output))
+    }
+
+    fn on_browse(&mut self) {
+        let Some(path) = (self.ask_data)() else {
+            return;
+        };
+        self.data_file = Some(path);
+    }
+
+    fn on_train(&mut self) {
+        let (program, output) = match self.prepare() {
+            Ok(pair) => pair,
+            Err(text) => {
+                self.note = text.to_string();
+                return;
+            }
+        };
+        let Some(data) = self.data_file.clone() else {
+            self.note = NEED_DATA.to_string();
+            return;
+        };
+        match train_args(&self.model, &data, &self.steps, &output) {
+            Ok(args) => self.launch(program, args, output),
+            Err(text) => self.note = text.to_string(),
+        }
+    }
+
+    fn on_eval(&mut self) {
+        let (program, output) = match self.prepare() {
+            Ok(pair) => pair,
+            Err(text) => {
+                self.note = text.to_string();
+                return;
+            }
+        };
+        let Some(entry) = self.selected_entry() else {
+            self.note = SELECT_RUN.to_string();
+            return;
+        };
+        match eval_args(&entry.run_id, &output) {
+            Ok(args) => self.launch(program, args, output),
+            Err(text) => self.note = text.to_string(),
+        }
+    }
+
+    fn on_export(&mut self) {
+        let (program, output) = match self.prepare() {
+            Ok(pair) => pair,
+            Err(text) => {
+                self.note = text.to_string();
+                return;
+            }
+        };
+        let Some(entry) = self.selected_entry() else {
+            self.note = SELECT_RUN.to_string();
+            return;
+        };
+        if entry.checkpoint_path.is_empty() {
+            self.note = NO_CHECKPOINT.to_string();
+            return;
+        }
+        match export_args(&entry.checkpoint_path, &output) {
+            Ok(args) => self.launch(program, args, output),
+            Err(text) => self.note = text.to_string(),
+        }
+    }
+
+    fn on_stop(&mut self) {
+        let Some(session) = self.session.as_mut() else {
+            self.note = NOTHING_RUNNING.to_string();
+            return;
+        };
+        session.stop();
+    }
+
+    fn launch(&mut self, program: PathBuf, args: Vec<String>, cwd: PathBuf) {
+        match (self.start)(LaunchRequest { program, args, cwd }) {
+            Ok(session) => {
+                self.session = Some(session);
+                self.log.clear();
+                self.note.clear();
+            }
+            Err(text) => self.note = text.to_string(),
+        }
+    }
 }
 
 fn rfd_folder(prefs: &Prefs) -> Option<PathBuf> {
@@ -256,6 +493,10 @@ fn rfd_folder(prefs: &Prefs) -> Option<PathBuf> {
 
 fn rfd_save(suggested: &str) -> Option<PathBuf> {
     rfd::FileDialog::new().set_file_name(suggested).save_file()
+}
+
+fn rfd_data() -> Option<PathBuf> {
+    rfd::FileDialog::new().pick_file()
 }
 
 fn row_label(entry: &RunEntry) -> String {
@@ -416,11 +657,16 @@ fn line(ui: &mut egui::Ui, name: &str, value: &str) {
 #[cfg(test)]
 mod tests {
     use super::RunForgeApp;
+    use crate::launch::{
+        ALREADY_RUNNING, BAD_ARGUMENT, BAD_STEPS, LaunchRequest, MISSING_TOOL, NEED_DATA,
+        NO_CHECKPOINT, NOTHING_RUNNING, OPEN_FOLDER, SELECT_RUN, START_FAILED, Session,
+    };
     use eframe::App;
     use eframe::egui::{self, Event, Modifiers, PointerButton};
     use runforge_core::{Theme, write_prefs};
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
 
     fn scratch(name: &str) -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -574,6 +820,7 @@ mod tests {
         let texts = Harness::texts(&output);
         assert!(texts.iter().any(|text| text.contains("run_history.json")));
         assert!(texts.iter().any(|text| text.contains("RunForge")));
+        assert!(texts.iter().all(|text| text != "Train"));
         output.drop_without_applying_deltas();
     }
 
@@ -802,5 +1049,286 @@ mod tests {
                 .any(|text| text.contains("appear more than once"))
         );
         output.drop_without_applying_deltas();
+    }
+
+    struct Seen {
+        verb: String,
+        data_ok: bool,
+        output_ok: bool,
+        cwd_ok: bool,
+        has_model: bool,
+        has_steps: bool,
+        run_ok: bool,
+        checkpoint_ok: bool,
+    }
+
+    fn inspect(request: &LaunchRequest, folder_name: &str) -> Seen {
+        let args = &request.args;
+        Seen {
+            verb: args.first().cloned().unwrap_or_default(),
+            data_ok: args
+                .windows(2)
+                .any(|pair| pair[0] == "--data" && pair[1] == "notes.json"),
+            output_ok: args.windows(2).any(|pair| {
+                pair[0] == "--output"
+                    && Path::new(&pair[1])
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        == Some(folder_name)
+            }),
+            cwd_ok: request.cwd.file_name().and_then(|name| name.to_str()) == Some(folder_name),
+            has_model: args.iter().any(|arg| arg == "--model"),
+            has_steps: args.iter().any(|arg| arg == "--steps"),
+            run_ok: args.get(1).map(String::as_str) == Some("newer"),
+            checkpoint_ok: args.get(1).map(String::as_str) == Some("ckpt"),
+        }
+    }
+
+    struct Scripted {
+        lines: Vec<String>,
+        running: bool,
+        stopped: Arc<AtomicBool>,
+    }
+
+    impl Session for Scripted {
+        fn take_lines(&mut self) -> Vec<String> {
+            std::mem::take(&mut self.lines)
+        }
+
+        fn finished(&mut self) -> Option<i32> {
+            if self.running { None } else { Some(0) }
+        }
+
+        fn stop(&mut self) {
+            self.stopped.store(true, Ordering::Relaxed);
+            self.running = false;
+        }
+    }
+
+    fn open_runs(name: &str) -> (PathBuf, RunForgeApp, Harness) {
+        let dir = scratch(name);
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        write_history(&folder);
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        (folder, app, ui)
+    }
+
+    fn folder_name(folder: &Path) -> String {
+        match folder.file_name().and_then(|name| name.to_str()) {
+            Some(name) => name.to_string(),
+            None => panic!("folder"),
+        }
+    }
+
+    #[test]
+    fn a_missing_tool_is_named_on_the_form() {
+        let (_folder, mut app, mut ui) = open_runs("missing-tool");
+        app.find_tool = Box::new(|| None);
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(texts.iter().any(|text| text == MISSING_TOOL));
+        assert!(texts.iter().any(|text| text == "No data file"));
+        assert!(texts.iter().any(|text| text == "No log yet."));
+        assert!(texts.iter().any(|text| text == "Train"));
+        output.drop_without_applying_deltas();
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, MISSING_TOOL);
+        ui.click(&mut app, "Stop");
+        assert_eq!(app.note, NOTHING_RUNNING);
+    }
+
+    #[test]
+    fn train_sends_the_fields_and_stop_ends_it() {
+        let (folder, mut app, mut ui) = open_runs("train");
+        let name = folder_name(&folder);
+        let seen = Arc::new(Mutex::new(Vec::<Seen>::new()));
+        let seen_start = Arc::clone(&seen);
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_start = Arc::clone(&stopped);
+        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.ask_data = Box::new(|| None);
+        ui.click(&mut app, "Browse");
+        assert!(app.data_file.is_none());
+        app.ask_data = Box::new(|| Some(PathBuf::from("notes.json")));
+        ui.click(&mut app, "Browse");
+        assert_eq!(
+            app.data_file
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .and_then(|file| file.to_str()),
+            Some("notes.json")
+        );
+        app.start = Box::new(move |request| {
+            let row = inspect(&request, &name);
+            seen_start
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .push(row);
+            Ok(Box::new(Scripted {
+                lines: vec!["trainer ready".to_string()],
+                running: true,
+                stopped: Arc::clone(&stopped_start),
+            }))
+        });
+        app.steps = "0".to_string();
+        app.data_file = Some(PathBuf::from("notes.json"));
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, BAD_STEPS);
+        app.steps.clear();
+        app.data_file = None;
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, NEED_DATA);
+        app.model = "small".to_string();
+        app.steps = "12".to_string();
+        app.data_file = Some(PathBuf::from("notes.json"));
+        ui.click(&mut app, "Train");
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, ALREADY_RUNNING);
+        ui.click(&mut app, "Eval");
+        assert_eq!(app.note, ALREADY_RUNNING);
+        ui.click(&mut app, "Export model");
+        assert_eq!(app.note, ALREADY_RUNNING);
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(texts.iter().any(|text| text == "trainer ready"));
+        output.drop_without_applying_deltas();
+        let ok = {
+            let rows = seen.lock().unwrap_or_else(|poison| poison.into_inner());
+            rows.len() == 1
+                && rows[0].verb == "train"
+                && rows[0].data_ok
+                && rows[0].output_ok
+                && rows[0].cwd_ok
+                && rows[0].has_model
+                && rows[0].has_steps
+        };
+        assert!(ok);
+        ui.click(&mut app, "Stop");
+        assert!(stopped.load(Ordering::Relaxed));
+        ui.show(&mut app, Vec::new()).drop_without_applying_deltas();
+        assert!(app.session.is_none());
+        assert!(app.note.starts_with("backprop exited"));
+        assert!(app.history.is_some());
+        ui.click(&mut app, "Stop");
+        assert_eq!(app.note, NOTHING_RUNNING);
+    }
+
+    #[test]
+    fn eval_and_export_use_the_selected_run() {
+        let (folder, mut app, mut ui) = open_runs("eval");
+        let name = folder_name(&folder);
+        let seen = Arc::new(Mutex::new(Vec::<Seen>::new()));
+        let seen_start = Arc::clone(&seen);
+        let stopped = Arc::new(AtomicBool::new(false));
+        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.start = Box::new(move |request| {
+            let row = inspect(&request, &name);
+            seen_start
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .push(row);
+            Ok(Box::new(Scripted {
+                lines: Vec::new(),
+                running: false,
+                stopped: Arc::clone(&stopped),
+            }))
+        });
+        ui.click(&mut app, "Eval");
+        ui.click(&mut app, "Export model");
+        let ok = {
+            let rows = seen.lock().unwrap_or_else(|poison| poison.into_inner());
+            rows.len() == 2
+                && rows[0].verb == "eval"
+                && rows[0].run_ok
+                && rows[0].output_ok
+                && rows[0].cwd_ok
+                && rows[1].verb == "export"
+                && rows[1].checkpoint_ok
+                && rows[1].output_ok
+                && rows[1].cwd_ok
+        };
+        assert!(ok);
+    }
+
+    #[test]
+    fn refused_commands_are_sentences() {
+        let dir = scratch("refuse");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(
+            folder.join("run_history.json"),
+            r#"[{"run_id":"-nope","checkpoint_path":"-ckpt","model_name":"Alpha"}]"#,
+        )
+        .unwrap();
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.start = Box::new(|_| Err(START_FAILED));
+        app.data_file = Some(PathBuf::from("notes.json"));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, START_FAILED);
+        ui.click(&mut app, "Eval");
+        assert_eq!(app.note, BAD_ARGUMENT);
+        ui.click(&mut app, "Export model");
+        assert_eq!(app.note, BAD_ARGUMENT);
+    }
+
+    #[test]
+    fn an_empty_checkpoint_and_a_missing_folder_are_sentences() {
+        let dir = scratch("empty-ckpt");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(
+            folder.join("run_history.json"),
+            r#"[{"run_id":"plain","model_name":"Alpha"}]"#,
+        )
+        .unwrap();
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        ui.click(&mut app, "Export model");
+        assert_eq!(app.note, NO_CHECKPOINT);
+        app.selected = None;
+        ui.click(&mut app, "Export model");
+        assert_eq!(app.note, SELECT_RUN);
+        ui.click(&mut app, "Eval");
+        assert_eq!(app.note, SELECT_RUN);
+        app.opened_file = None;
+        ui.click(&mut app, "Train");
+        assert_eq!(app.note, OPEN_FOLDER);
+    }
+
+    #[test]
+    fn a_prefs_failure_on_exit_keeps_that_sentence() {
+        let (folder, mut app, mut ui) = open_runs("exit-prefs");
+        let name = folder_name(&folder);
+        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.data_file = Some(PathBuf::from("notes.json"));
+        app.start = Box::new(move |request| {
+            let _ = inspect(&request, &name);
+            Ok(Box::new(Scripted {
+                lines: Vec::new(),
+                running: false,
+                stopped: Arc::new(AtomicBool::new(false)),
+            }))
+        });
+        ui.click(&mut app, "Train");
+        let blocker = scratch("exit-prefs-file").join("not-a-dir");
+        std::fs::write(&blocker, b"x").unwrap();
+        app.prefs_dir = blocker;
+        ui.show(&mut app, Vec::new()).drop_without_applying_deltas();
+        assert!(app.note.starts_with("could not save preferences"));
+        assert!(!app.note.starts_with("backprop"));
     }
 }

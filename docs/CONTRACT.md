@@ -1,6 +1,6 @@
 # RunForge 2 contract
 
-Design of record. Written 2026-10-03. Slice 1, the reader, is this repository. Slice 2 is not in this tree. The published Store app stays the 1.0.1 classifier build until a package above `1.0.1.0` is submitted.
+Design of record. Written 2026-10-03. Slice 1, the reader, and slice 2, the launcher, are this repository. The package is still unsubmitted. The published Store app stays the 1.0.1 classifier build until a package above `1.0.1.0` is submitted.
 
 The 1.0.1 classifier app stays in the prototypes archive. This repository does not carry it. New work follows this contract.
 
@@ -39,7 +39,7 @@ The repository is `mcp-tool-shop-org/runforge`. The prototypes tree stays where 
 
 **Slice 1, the first package.** A reader. The user opens one folder. The app loads `run_history.json` and shows the bench. No training, no process spawn, no network.
 
-**Slice 2, after slice 1 is the submitted app.** A launcher. If `backprop` is already on `PATH`, the app can start three commands and follow the log: `train`, `eval`, `export`. Arguments are built by the app. Nothing is passed through a shell. If the command is missing, the buttons say so. The app does not download backpropagate, install it, or vendor it.
+**Slice 2, in this tree.** The package is still unsubmitted. A launcher. If `backprop` is already on `PATH`, the app can start three commands and follow the log: `train`, `eval`, `export`. Arguments are built by the app. Nothing is passed through a shell. If the command is missing, the buttons say so. The app does not download backpropagate, install it, or vendor it.
 
 Slice 2's form has four fields: model name, data file, step count, and the open output folder. Every other training flag stays at backpropagate's default. Stop ends the process tree RunForge started. There is no separate backprop cancel protocol in this contract.
 
@@ -70,7 +70,7 @@ The file is a JSON array. Backpropagate writes it from `RunHistoryManager` (`bac
 | `loss_history` | The curve, in stored order. |
 | `hyperparameters` | Object. Compare shows keys whose parsed values differ. |
 | `failure_reason` | Shown on a failed run. |
-| `checkpoint_path` | Shown as text. The app does not open the checkpoint. |
+| `checkpoint_path` | Shown as text. Export model passes this path to an already-installed `backprop`. The app does not open the checkpoint itself. |
 | `export_paths` | Shown as text. |
 | `dataset_hash` | Shown when present. |
 | `eval` | Summary only: `held_out_loss`, `perplexity`, `task_metrics`, `eval_n`, `n_prompts`. |
@@ -108,6 +108,7 @@ One window.
 - Compare: two rows, both series on one chart, by sample index. Hyperparameters that differ. Eval summaries when present.
 - The skipped-entry count, when it is not zero.
 - Export of the list as CSV, of the selected curve as CSV (index, loss, empty cell for a gap), and of the selected entry as JSON with unknown keys preserved.
+- Once a folder is open: model name, data file, step count, and the open output folder. Train, Eval, and Export model start an already-installed `backprop`. The log follows that command. Stop ends the process tree. The app does not download, install, or vendor backpropagate.
 - The version string `2.0.0`.
 
 No account, no telemetry. Preferences (last folder, theme) go to the packaged app's LocalState. An unpackaged run keeps them beside the executable and does not pretend to read LocalState. Run history is only read from the folder the user opened.

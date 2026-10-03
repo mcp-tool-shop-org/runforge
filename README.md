@@ -4,7 +4,7 @@
 
 RunForge is the Windows bench for a [backpropagate](https://github.com/mcp-tool-shop-org/backpropagate) output folder. Open the folder that contains `run_history.json`, or the folder above an `output` directory. The window lists the runs, draws the stored loss, compares two rows, and exports the table or the curve.
 
-Backpropagate is the trainer. This app does not train, does not download a model, and does not ship PyTorch. A later slice may launch a `backprop` command that is already installed. That slice is not in this tree.
+Backpropagate is the trainer. This app does not contain the trainer, does not download a model, and does not ship PyTorch. When `backprop` is already on PATH, Train, Eval, and Export model start that command and follow its log. Arguments are built by the app. Nothing is passed through a shell. If `backprop` is missing, the buttons say so. RunForge does not download backpropagate, install it, or vendor it.
 
 The curve is the stored `loss_history`, in file order, at most the samples the trainer kept. `final_loss` is a column. It is not appended to the line. A null sample is a gap, not a zero.
 

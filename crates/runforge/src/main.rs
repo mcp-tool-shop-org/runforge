@@ -4,6 +4,7 @@ use anyhow::Context;
 use runforge_core::{VERSION, choose_prefs_dir};
 
 mod app;
+mod launch;
 mod store;
 
 fn main() -> eframe::Result {
