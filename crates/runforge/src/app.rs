@@ -16,8 +16,8 @@ use runforge_core::{
 
 use crate::launch::{
     ALREADY_RUNNING, LaunchRequest, MISSING_TOOL, NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING,
-    OPEN_FOLDER, SELECT_RUN, Session, apply_log_update, bust_tool_cache, eval_args, exit_note,
-    export_args, installed_backprop, start_installed, train_args,
+    OPEN_FOLDER, SELECT_RUN, Session, ToolAnswer, apply_log_update, bust_tool_cache, eval_args,
+    exit_note, export_args, start_installed, tool_answer, train_args,
 };
 
 const CURVE: Color32 = Color32::from_rgb(0x4e, 0xcd, 0xc4);
@@ -31,8 +31,18 @@ struct Row {
 type AskFolder = Box<dyn FnMut(&Prefs) -> Option<PathBuf>>;
 type AskSave = Box<dyn FnMut(&str) -> Option<PathBuf>>;
 type AskData = Box<dyn FnMut() -> Option<PathBuf>>;
-type FindTool = Box<dyn FnMut() -> Option<PathBuf>>;
+type FindTool = Box<dyn FnMut() -> ToolAnswer>;
 type StartCommand = Box<dyn FnMut(LaunchRequest) -> Result<Box<dyn Session>, &'static str>>;
+
+enum Begin {
+    Now(PathBuf, PathBuf),
+    Later(PathBuf),
+}
+
+struct HeldLaunch {
+    args: Vec<String>,
+    cwd: PathBuf,
+}
 
 pub struct RunForgeApp {
     prefs_dir: PathBuf,
@@ -54,6 +64,10 @@ pub struct RunForgeApp {
     /// True while the last log line is a carriage-return progress revision.
     log_open: bool,
     session: Option<Box<dyn Session>>,
+    /// Train, Eval, or Export captured while the PATH walk is still running.
+    held: Option<HeldLaunch>,
+    /// The latest tool answer had no finished result yet.
+    tool_pending: bool,
 }
 
 impl RunForgeApp {
@@ -70,7 +84,7 @@ impl RunForgeApp {
             ask_folder: Box::new(rfd_folder),
             ask_save: Box::new(rfd_save),
             ask_data: Box::new(rfd_data),
-            find_tool: Box::new(installed_backprop),
+            find_tool: Box::new(tool_answer),
             start: Box::new(start_installed),
             model: String::new(),
             data_file: None,
@@ -78,6 +92,8 @@ impl RunForgeApp {
             log: VecDeque::new(),
             log_open: false,
             session: None,
+            held: None,
+            tool_pending: false,
         };
         if let Some(folder) = app.prefs.last_folder.clone() {
             app.load_folder(folder);
@@ -136,6 +152,7 @@ impl RunForgeApp {
 impl eframe::App for RunForgeApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_session();
+        self.resume_held();
         ui.ctx().set_visuals(match self.prefs.theme {
             Theme::Dark => egui::Visuals::dark(),
             Theme::Light => egui::Visuals::light(),
@@ -152,7 +169,7 @@ impl eframe::App for RunForgeApp {
             egui::Panel::bottom("log").show(ui, |ui| self.log_panel(ui));
             self.bench(ui);
         }
-        if self.session.is_some() {
+        if self.session.is_some() || self.held.is_some() || self.tool_pending {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(200));
         }
@@ -202,7 +219,9 @@ impl RunForgeApp {
     }
 
     fn launch_form(&mut self, ui: &mut egui::Ui) {
-        let missing = (self.find_tool)().is_none();
+        let answer = (self.find_tool)();
+        self.tool_pending = matches!(answer, ToolAnswer::Pending);
+        let missing = matches!(answer, ToolAnswer::Ready(None));
         let data_label = self
             .data_file
             .as_ref()
@@ -388,18 +407,55 @@ impl RunForgeApp {
         history.get(index).cloned()
     }
 
-    fn prepare(&mut self) -> Result<(PathBuf, PathBuf), &'static str> {
+    fn begin(&mut self) -> Result<Begin, &'static str> {
         bust_tool_cache();
         if self.session.is_some() {
             return Err(ALREADY_RUNNING);
         }
-        let Some(program) = (self.find_tool)() else {
-            return Err(MISSING_TOOL);
+        let program = match (self.find_tool)() {
+            ToolAnswer::Ready(Some(program)) => Some(program),
+            ToolAnswer::Ready(None) => return Err(MISSING_TOOL),
+            ToolAnswer::Pending => None,
         };
         let Some(output) = self.output_dir() else {
             return Err(OPEN_FOLDER);
         };
-        Ok((program, output))
+        Ok(match program {
+            Some(program) => Begin::Now(program, output),
+            None => Begin::Later(output),
+        })
+    }
+
+    fn finish_begin(&mut self, begin: Begin, args: Vec<String>) {
+        match begin {
+            Begin::Now(program, cwd) => {
+                self.held = None;
+                self.launch(program, args, cwd);
+            }
+            Begin::Later(cwd) => {
+                self.held = Some(HeldLaunch { args, cwd });
+                self.note.clear();
+            }
+        }
+    }
+
+    fn resume_held(&mut self) {
+        if self.held.is_none() || self.session.is_some() {
+            return;
+        }
+        let program = match (self.find_tool)() {
+            ToolAnswer::Pending => return,
+            ToolAnswer::Ready(None) => {
+                self.held = None;
+                self.note = MISSING_TOOL.to_string();
+                return;
+            }
+            ToolAnswer::Ready(Some(program)) => program,
+        };
+        let Some(held) = self.held.take() else {
+            return;
+        };
+        self.launch(program, held.args, held.cwd);
     }
 
     fn on_browse(&mut self) {
@@ -410,8 +466,8 @@ impl RunForgeApp {
     }
 
     fn on_train(&mut self) {
-        let (program, output) = match self.prepare() {
-            Ok(pair) => pair,
+        let begin = match self.begin() {
+            Ok(begin) => begin,
             Err(text) => {
                 self.note = text.to_string();
                 return;
@@ -421,15 +477,18 @@ impl RunForgeApp {
             self.note = NEED_DATA.to_string();
             return;
         };
+        let output = match &begin {
+            Begin::Now(_, output) | Begin::Later(output) => output.clone(),
+        };
         match train_args(&self.model, &data, &self.steps, &output) {
-            Ok(args) => self.launch(program, args, output),
+            Ok(args) => self.finish_begin(begin, args),
             Err(text) => self.note = text.to_string(),
         }
     }
 
     fn on_eval(&mut self) {
-        let (program, output) = match self.prepare() {
-            Ok(pair) => pair,
+        let begin = match self.begin() {
+            Ok(begin) => begin,
             Err(text) => {
                 self.note = text.to_string();
                 return;
@@ -439,15 +498,18 @@ impl RunForgeApp {
             self.note = SELECT_RUN.to_string();
             return;
         };
+        let output = match &begin {
+            Begin::Now(_, output) | Begin::Later(output) => output.clone(),
+        };
         match eval_args(&entry.run_id, &output) {
-            Ok(args) => self.launch(program, args, output),
+            Ok(args) => self.finish_begin(begin, args),
             Err(text) => self.note = text.to_string(),
         }
     }
 
     fn on_export(&mut self) {
-        let (program, output) = match self.prepare() {
-            Ok(pair) => pair,
+        let begin = match self.begin() {
+            Ok(begin) => begin,
             Err(text) => {
                 self.note = text.to_string();
                 return;
@@ -461,8 +523,11 @@ impl RunForgeApp {
             self.note = NO_CHECKPOINT.to_string();
             return;
         }
+        let output = match &begin {
+            Begin::Now(_, output) | Begin::Later(output) => output.clone(),
+        };
         match export_args(&entry.checkpoint_path, &output) {
-            Ok(args) => self.launch(program, args, output),
+            Ok(args) => self.finish_begin(begin, args),
             Err(text) => self.note = text.to_string(),
         }
     }
@@ -665,6 +730,7 @@ mod tests {
     use crate::launch::{
         ALREADY_RUNNING, BAD_ARGUMENT, BAD_STEPS, LaunchRequest, LogUpdate, MISSING_TOOL,
         NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING, OPEN_FOLDER, SELECT_RUN, START_FAILED, Session,
+        ToolAnswer,
     };
     use eframe::App;
     use eframe::egui::{self, Event, Modifiers, PointerButton};
@@ -1138,7 +1204,7 @@ mod tests {
     #[test]
     fn a_missing_tool_is_named_on_the_form() {
         let (_folder, mut app, mut ui) = open_runs("missing-tool");
-        app.find_tool = Box::new(|| None);
+        app.find_tool = Box::new(|| ToolAnswer::Ready(None));
         let output = ui.show(&mut app, Vec::new());
         let texts = Harness::texts(&output);
         assert!(texts.iter().any(|text| text == MISSING_TOOL));
@@ -1160,7 +1226,7 @@ mod tests {
         let seen_start = Arc::clone(&seen);
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_start = Arc::clone(&stopped);
-        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.find_tool = Box::new(|| ToolAnswer::Ready(Some(PathBuf::from("backprop.exe"))));
         app.ask_data = Box::new(|| None);
         ui.click(&mut app, "Browse");
         assert!(app.data_file.is_none());
@@ -1235,7 +1301,7 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::<Seen>::new()));
         let seen_start = Arc::clone(&seen);
         let stopped = Arc::new(AtomicBool::new(false));
-        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.find_tool = Box::new(|| ToolAnswer::Ready(Some(PathBuf::from("backprop.exe"))));
         app.start = Box::new(move |request| {
             let row = inspect(&request, &name);
             seen_start
@@ -1278,7 +1344,7 @@ mod tests {
         let mut app = RunForgeApp::open(dir.join("prefs"));
         let chosen = folder.clone();
         app.ask_folder = Box::new(move |_| Some(chosen.clone()));
-        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.find_tool = Box::new(|| ToolAnswer::Ready(Some(PathBuf::from("backprop.exe"))));
         app.start = Box::new(|_| Err(START_FAILED));
         app.data_file = Some(PathBuf::from("notes.json"));
         let mut ui = Harness::new();
@@ -1304,7 +1370,7 @@ mod tests {
         let mut app = RunForgeApp::open(dir.join("prefs"));
         let chosen = folder.clone();
         app.ask_folder = Box::new(move |_| Some(chosen.clone()));
-        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.find_tool = Box::new(|| ToolAnswer::Ready(Some(PathBuf::from("backprop.exe"))));
         let mut ui = Harness::new();
         ui.click(&mut app, "Open folder");
         ui.click(&mut app, "Export model");
@@ -1323,7 +1389,7 @@ mod tests {
     fn a_prefs_failure_on_exit_keeps_that_sentence() {
         let (folder, mut app, mut ui) = open_runs("exit-prefs");
         let name = folder_name(&folder);
-        app.find_tool = Box::new(|| Some(PathBuf::from("backprop.exe")));
+        app.find_tool = Box::new(|| ToolAnswer::Ready(Some(PathBuf::from("backprop.exe"))));
         app.data_file = Some(PathBuf::from("notes.json"));
         app.start = Box::new(move |request| {
             let _ = inspect(&request, &name);
@@ -1399,5 +1465,52 @@ mod tests {
                 .all(|text| !text.contains("Open the folder where backpropagate wrote"));
         assert!(reloaded);
         output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn a_click_waits_without_calling_the_tool_missing() {
+        let (folder, mut app, mut ui) = open_runs("walk-click");
+        let name = folder_name(&folder);
+        let pending = Arc::new(AtomicBool::new(true));
+        let pending_find = Arc::clone(&pending);
+        app.find_tool = Box::new(move || {
+            if pending_find.load(Ordering::Relaxed) {
+                ToolAnswer::Pending
+            } else {
+                ToolAnswer::Ready(Some(PathBuf::from("backprop.exe")))
+            }
+        });
+        app.data_file = Some(PathBuf::from("notes.json"));
+        let launched = Arc::new(AtomicBool::new(false));
+        let launched_start = Arc::clone(&launched);
+        let name_ok = Arc::new(AtomicBool::new(false));
+        let name_ok_start = Arc::clone(&name_ok);
+        app.start = Box::new(move |request| {
+            let row = inspect(&request, &name);
+            let program_ok =
+                request.program.file_name().and_then(|file| file.to_str()) == Some("backprop.exe");
+            name_ok_start.store(
+                program_ok && row.verb == "train" && row.data_ok,
+                Ordering::Relaxed,
+            );
+            launched_start.store(true, Ordering::Relaxed);
+            Ok(Box::new(Scripted {
+                lines: Vec::new(),
+                running: true,
+                stopped: Arc::new(AtomicBool::new(false)),
+            }))
+        });
+        ui.click(&mut app, "Train");
+        let waiting =
+            app.note.is_empty() && app.session.is_none() && !launched.load(Ordering::Relaxed);
+        assert!(waiting);
+        assert!(app.note != MISSING_TOOL);
+        pending.store(false, Ordering::Relaxed);
+        ui.show(&mut app, Vec::new()).drop_without_applying_deltas();
+        let started = launched.load(Ordering::Relaxed)
+            && name_ok.load(Ordering::Relaxed)
+            && app.session.is_some()
+            && app.note != MISSING_TOOL;
+        assert!(started);
     }
 }

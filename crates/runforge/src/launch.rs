@@ -1,14 +1,17 @@
 //! Start an already-installed `backprop`. Arguments are a list. Nothing goes through a shell.
 //!
-//! `.cmd` and `.bat` are skipped: Windows would run those through `cmd.exe`. Stop kills the
-//! process tree with a job object. `std::process::Child` has no suspended thread to resume, so
-//! the job is assigned immediately after spawn.
+//! `.cmd` and `.bat` are skipped: Windows would run those through `cmd.exe`. The child is not
+//! given a new environment. On Windows it is attached to a hidden pseudoconsole, so a console
+//! program line-buffers its own stdout, and Stop kills the process tree with a job object.
 
 use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+#[cfg(not(windows))]
 use std::process::{Child, Command, Stdio};
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -26,7 +29,7 @@ pub(crate) const BAD_ARGUMENT: &str = "That value cannot be passed as an argumen
 pub(crate) const START_FAILED: &str = "backprop could not be started.";
 
 const LOG_CAP: usize = 400;
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const TOOL_FRESH: Duration = Duration::from_secs(2);
 const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
 /// `KILL_ON_JOB_CLOSE` is rejected on the basic limit class (`ERROR_INVALID_PARAMETER`).
 const JOB_EXTENDED_LIMIT: i32 = 9;
@@ -141,7 +144,7 @@ pub(crate) fn find_backprop(path_env: &str, pathext: &str) -> Option<PathBuf> {
         }
         for name in &names {
             let candidate = dir.join(name);
-            if candidate.is_absolute() && candidate.is_file() {
+            if candidate.is_absolute() && stat_file(&candidate) {
                 return Some(candidate);
             }
         }
@@ -161,42 +164,153 @@ fn tool_names(pathext: &str) -> Vec<String> {
     names
 }
 
+fn stat_file(path: &Path) -> bool {
+    #[cfg(test)]
+    {
+        let delay = STAT_DELAY_MS.load(Ordering::Acquire);
+        if delay > 0 && !STAT_SLEPT.swap(true, Ordering::AcqRel) {
+            thread::sleep(Duration::from_millis(delay));
+        }
+        stat_threads()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .push(thread::current().id());
+    }
+    path.is_file()
+}
+
 struct ToolHit {
+    generation: u64,
     at: Instant,
     path: Option<PathBuf>,
 }
 
-fn tool_cache() -> &'static Mutex<Option<ToolHit>> {
-    static CACHE: Mutex<Option<ToolHit>> = Mutex::new(None);
-    &CACHE
+/// What the window may show without waiting on `PATH`.
+pub(crate) enum ToolAnswer {
+    /// The walk for this generation has finished.
+    Ready(Option<PathBuf>),
+    /// A walk is in flight and there is no finished answer yet.
+    Pending,
+}
+
+struct ToolSlot {
+    generation: u64,
+    published: Option<ToolHit>,
+    walking: Option<u64>,
+}
+
+fn tool_slot() -> &'static Mutex<ToolSlot> {
+    static SLOT: Mutex<ToolSlot> = Mutex::new(ToolSlot {
+        generation: 0,
+        published: None,
+        walking: None,
+    });
+    &SLOT
+}
+
+fn lock_tool() -> std::sync::MutexGuard<'static, ToolSlot> {
+    tool_slot()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
 }
 
 /// Drop the cached hit or miss so the next lookup walks `PATH` again.
 pub(crate) fn bust_tool_cache() {
-    let mut guard = tool_cache()
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
-    *guard = None;
+    #[cfg(test)]
+    let _gate = cache_gate();
+    bust_tool_cache_locked();
 }
 
-/// A hit or a miss is reused for two seconds so a frame does not stat `PATH`.
-pub(crate) fn installed_backprop() -> Option<PathBuf> {
-    let mut guard = tool_cache()
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
-    if let Some(hit) = guard.as_ref()
-        && hit.at.elapsed() < Duration::from_secs(2)
-    {
-        return hit.path.clone();
+fn bust_tool_cache_locked() {
+    let mut guard = lock_tool();
+    guard.generation = guard.generation.wrapping_add(1);
+    guard.published = None;
+}
+
+/// The last finished lookup. A frame never stats `PATH` and never waits for a walk.
+///
+/// A result younger than two seconds is returned as it is. An older result stays
+/// on screen while a background walk replaces it. After `bust_tool_cache` there
+/// is no result yet, so this returns [`ToolAnswer::Pending`] until that walk
+/// finishes. `is_file` runs on the worker.
+pub(crate) fn tool_answer() -> ToolAnswer {
+    #[cfg(test)]
+    let _gate = cache_gate();
+    tool_answer_locked()
+}
+
+fn tool_answer_locked() -> ToolAnswer {
+    let mut guard = lock_tool();
+    let generation = guard.generation;
+    let published = guard
+        .published
+        .as_ref()
+        .filter(|hit| hit.generation == generation)
+        .map(|hit| (hit.at.elapsed() >= TOOL_FRESH, hit.path.clone()));
+    if let Some((stale, path)) = published {
+        if stale && guard.walking != Some(generation) {
+            start_walk(&mut guard, generation);
+        }
+        return ToolAnswer::Ready(path);
     }
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    let pathext = std::env::var_os("PATHEXT").unwrap_or_default();
-    let found = find_backprop(&path.to_string_lossy(), &pathext.to_string_lossy());
-    *guard = Some(ToolHit {
-        at: Instant::now(),
-        path: found.clone(),
+    if guard.walking != Some(generation) {
+        start_walk(&mut guard, generation);
+    }
+    ToolAnswer::Pending
+}
+
+fn start_walk(guard: &mut ToolSlot, generation: u64) {
+    guard.walking = Some(generation);
+    thread::spawn(move || {
+        #[cfg(test)]
+        STAT_SLEPT.store(false, Ordering::Release);
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let pathext = std::env::var_os("PATHEXT").unwrap_or_default();
+        let found = find_backprop(&path.to_string_lossy(), &pathext.to_string_lossy());
+        finish_walk(generation, found);
     });
-    found
+}
+
+fn finish_walk(generation: u64, found: Option<PathBuf>) {
+    let mut guard = lock_tool();
+    if guard.generation != generation {
+        if guard.walking == Some(generation) {
+            guard.walking = None;
+        }
+        return;
+    }
+    guard.published = Some(ToolHit {
+        generation,
+        at: Instant::now(),
+        path: found,
+    });
+    guard.walking = None;
+}
+
+#[cfg(test)]
+static STAT_DELAY_MS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+static STAT_SLEPT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+fn cache_gate() -> std::sync::MutexGuard<'static, ()> {
+    static GATE: Mutex<()> = Mutex::new(());
+    GATE.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
+#[cfg(test)]
+fn stat_threads() -> &'static Mutex<Vec<thread::ThreadId>> {
+    static THREADS: Mutex<Vec<thread::ThreadId>> = Mutex::new(Vec::new());
+    &THREADS
+}
+
+/// Make the published answer look older than the two-second window.
+#[cfg(test)]
+pub(crate) fn expire_tool_cache_for_test() {
+    if let Some(hit) = lock_tool().published.as_mut() {
+        hit.at = Instant::now() - Duration::from_secs(3);
+    }
 }
 
 pub(crate) fn exit_note(code: i32) -> String {
@@ -241,6 +355,18 @@ pub(crate) fn start_installed(request: LaunchRequest) -> Result<Box<dyn Session>
 }
 
 pub(crate) fn spawn_session(request: LaunchRequest) -> Result<LiveSession, &'static str> {
+    #[cfg(windows)]
+    {
+        spawn_console_session(request)
+    }
+    #[cfg(not(windows))]
+    {
+        spawn_piped_session(request)
+    }
+}
+
+#[cfg(not(windows))]
+fn spawn_piped_session(request: LaunchRequest) -> Result<LiveSession, &'static str> {
     let mut command = Command::new(&request.program);
     command
         .args(&request.args)
@@ -248,14 +374,7 @@ pub(crate) fn spawn_session(request: LaunchRequest) -> Result<LiveSession, &'sta
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
     let mut child = command.spawn().map_err(|_| START_FAILED)?;
-    #[cfg(windows)]
-    let job = assign_kill_on_close(&child);
     let lines = Arc::new(Mutex::new(VecDeque::new()));
     let readers_left = Arc::new(AtomicUsize::new(0));
     let mut readers = Vec::new();
@@ -271,8 +390,6 @@ pub(crate) fn spawn_session(request: LaunchRequest) -> Result<LiveSession, &'sta
         readers,
         readers_left,
         exit_code: None,
-        #[cfg(windows)]
-        job,
     })
 }
 
@@ -322,8 +439,7 @@ impl LogPump {
                 return None;
             }
             if self.progress && !self.pending.is_empty() && consumed == available {
-                let text = String::from_utf8_lossy(&self.pending).into_owned();
-                return Some(LogUpdate::Revise(text));
+                return Some(LogUpdate::Revise(visible_line(&self.pending)));
             }
         }
     }
@@ -339,7 +455,7 @@ impl LogPump {
     }
 
     fn take_commit(&mut self) -> LogUpdate {
-        let text = String::from_utf8_lossy(&self.pending).into_owned();
+        let text = visible_line(&self.pending);
         self.pending.clear();
         self.progress = false;
         LogUpdate::Commit(text)
@@ -350,7 +466,7 @@ impl LogPump {
         let update = if self.pending.is_empty() {
             None
         } else {
-            let text = String::from_utf8_lossy(&self.pending).into_owned();
+            let text = visible_line(&self.pending);
             self.pending.clear();
             Some(if self.progress {
                 LogUpdate::Revise(text)
@@ -424,6 +540,51 @@ where
     })
 }
 
+/// Drop console control sequences so a pseudoconsole stream stays readable.
+fn visible_line(bytes: &[u8]) -> String {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != 0x1b {
+            out.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+        index += 1;
+        if index >= bytes.len() {
+            break;
+        }
+        match bytes[index] {
+            b'[' => {
+                index += 1;
+                while index < bytes.len() && !(0x40..=0x7e).contains(&bytes[index]) {
+                    index += 1;
+                }
+                if index < bytes.len() {
+                    index += 1;
+                }
+            }
+            b']' | b'P' | b'X' | b'^' | b'_' => {
+                index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == 0x07 {
+                        index += 1;
+                        break;
+                    }
+                    if bytes[index] == 0x1b && index + 1 < bytes.len() && bytes[index + 1] == b'\\'
+                    {
+                        index += 2;
+                        break;
+                    }
+                    index += 1;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 fn push_shared(lines: &Mutex<VecDeque<LogUpdate>>, update: LogUpdate) {
     if let LogUpdate::Revise(text) = &update
         && text.is_empty()
@@ -442,7 +603,12 @@ fn push_shared(lines: &Mutex<VecDeque<LogUpdate>>, update: LogUpdate) {
 }
 
 pub(crate) struct LiveSession {
+    #[cfg(not(windows))]
     child: Option<Child>,
+    #[cfg(windows)]
+    process: Option<TrackedProcess>,
+    #[cfg(windows)]
+    console: Option<HiddenConsole>,
     lines: Arc<Mutex<VecDeque<LogUpdate>>>,
     readers: Vec<thread::JoinHandle<()>>,
     readers_left: Arc<AtomicUsize>,
@@ -464,26 +630,48 @@ impl Session for LiveSession {
         if let Some(code) = self.exit_code {
             return Some(code);
         }
-        let child = self.child.as_mut()?;
-        let status = match child.try_wait() {
-            Ok(Some(status)) => status,
-            Ok(None) => return None,
-            Err(_) => {
-                self.exit_code = Some(-1);
-                return Some(-1);
-            }
-        };
-        self.wait_for_readers();
-        let code = status.code().unwrap_or(-1);
-        self.exit_code = Some(code);
-        Some(code)
+        #[cfg(windows)]
+        {
+            let handle = self.process.as_ref()?.handle;
+            let code = poll_process(handle)?;
+            // Closing the pseudoconsole lets the output pipe end, so the reader
+            // can finish the last line. The process has already exited.
+            self.console.take();
+            self.wait_for_readers();
+            self.exit_code = Some(code);
+            Some(code)
+        }
+        #[cfg(not(windows))]
+        {
+            let child = self.child.as_mut()?;
+            let status = match child.try_wait() {
+                Ok(Some(status)) => status,
+                Ok(None) => return None,
+                Err(_) => {
+                    self.exit_code = Some(-1);
+                    return Some(-1);
+                }
+            };
+            self.wait_for_readers();
+            let code = status.code().unwrap_or(-1);
+            self.exit_code = Some(code);
+            Some(code)
+        }
     }
 
     fn stop(&mut self) {
         #[cfg(windows)]
-        if let Some(mut job) = self.job.take() {
-            job.terminate();
+        {
+            if let Some(mut job) = self.job.take() {
+                job.terminate();
+            }
+            if let Some(process) = self.process.as_ref() {
+                unsafe {
+                    TerminateProcess(process.handle, 1);
+                }
+            }
         }
+        #[cfg(not(windows))]
         if let Some(child) = self.child.as_mut() {
             let _ = child.kill();
         }
@@ -493,8 +681,17 @@ impl Session for LiveSession {
 impl Drop for LiveSession {
     fn drop(&mut self) {
         self.stop();
+        #[cfg(windows)]
+        if let Some(process) = self.process.as_ref() {
+            wait_process(process.handle);
+        }
+        #[cfg(not(windows))]
         if let Some(mut child) = self.child.take() {
             let _ = child.wait();
+        }
+        #[cfg(windows)]
+        {
+            self.console.take();
         }
         // Detach. Joining would stall the window if a pipe stayed open.
         self.readers.clear();
@@ -512,6 +709,429 @@ impl LiveSession {
     }
 }
 
+#[cfg(windows)]
+const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+/// The process is assigned to the job before it runs. Assigning a running
+/// pseudoconsole process makes it fail at startup.
+const CREATE_SUSPENDED: u32 = 0x0000_0004;
+#[cfg(windows)]
+const STARTF_USESTDHANDLES: u32 = 0x0000_0100;
+#[cfg(windows)]
+const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
+#[cfg(windows)]
+const WAIT_OBJECT_0: u32 = 0;
+#[cfg(windows)]
+const WAIT_TIMEOUT: u32 = 258;
+
+/// Win32 `COORD`. Spawn passes the packed size. The layout test locks this shape.
+#[cfg(windows)]
+#[cfg_attr(not(test), allow(dead_code))]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Coord {
+    x: i16,
+    y: i16,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct SecurityAttributes {
+    length: u32,
+    _pad: u32,
+    descriptor: *mut c_void,
+    inherit: i32,
+    _pad2: u32,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct StartupInfoW {
+    cb: u32,
+    _pad0: u32,
+    reserved: *mut u16,
+    desktop: *mut u16,
+    title: *mut u16,
+    x: u32,
+    y: u32,
+    x_size: u32,
+    y_size: u32,
+    x_count: u32,
+    y_count: u32,
+    fill: u32,
+    flags: u32,
+    show: u16,
+    reserved2_len: u16,
+    _pad1: u32,
+    reserved2: *mut u8,
+    std_input: *mut c_void,
+    std_output: *mut c_void,
+    std_error: *mut c_void,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct StartupInfoExW {
+    startup: StartupInfoW,
+    attributes: *mut c_void,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct ProcessInformation {
+    process: *mut c_void,
+    thread: *mut c_void,
+    pid: u32,
+    tid: u32,
+}
+
+#[cfg(windows)]
+struct TrackedProcess {
+    handle: *mut c_void,
+}
+
+#[cfg(windows)]
+impl Drop for TrackedProcess {
+    fn drop(&mut self) {
+        close_handle(self.handle);
+    }
+}
+
+#[cfg(windows)]
+struct HiddenConsole {
+    handle: *mut c_void,
+    input_write: *mut c_void,
+}
+
+#[cfg(windows)]
+impl Drop for HiddenConsole {
+    fn drop(&mut self) {
+        unsafe {
+            close_handle(self.input_write);
+            if !self.handle.is_null() {
+                ClosePseudoConsole(self.handle);
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn close_handle(handle: *mut c_void) {
+    if !handle.is_null() {
+        unsafe {
+            CloseHandle(handle);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn poll_process(handle: *mut c_void) -> Option<i32> {
+    unsafe {
+        match WaitForSingleObject(handle, 0) {
+            WAIT_TIMEOUT => None,
+            WAIT_OBJECT_0 => Some(process_exit_code(handle)),
+            _ => Some(-1),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn wait_process(handle: *mut c_void) {
+    unsafe {
+        WaitForSingleObject(handle, 0xFFFF_FFFF);
+    }
+}
+
+#[cfg(windows)]
+fn process_exit_code(handle: *mut c_void) -> i32 {
+    let mut code = 0u32;
+    unsafe {
+        if GetExitCodeProcess(handle, &mut code) == 0 {
+            return -1;
+        }
+    }
+    code as i32
+}
+
+#[cfg(windows)]
+fn wide_units(text: &std::ffi::OsStr) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    text.encode_wide().chain(std::iter::once(0)).collect()
+}
+
+/// CreateProcess keeps a trailing slash only on a drive root.
+#[cfg(windows)]
+fn cwd_units(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    let mut units: Vec<u16> = path.as_os_str().encode_wide().collect();
+    let slash = |unit: u16| unit == u16::from(b'\\') || unit == u16::from(b'/');
+    while units.len() > 3 && units.last().copied().is_some_and(slash) {
+        units.pop();
+    }
+    units.push(0);
+    units
+}
+
+#[cfg(windows)]
+fn push_quoted(out: &mut Vec<u16>, text: &std::ffi::OsStr) {
+    use std::os::windows::ffi::OsStrExt;
+    let units: Vec<u16> = text.encode_wide().collect();
+    let quote = units.is_empty()
+        || units.iter().any(|unit| {
+            *unit == u16::from(b' ') || *unit == u16::from(b'\t') || *unit == u16::from(b'"')
+        });
+    if !quote {
+        out.extend(units);
+        return;
+    }
+    out.push(u16::from(b'"'));
+    let mut slashes = 0usize;
+    for unit in units {
+        if unit == u16::from(b'\\') {
+            slashes += 1;
+            continue;
+        }
+        if unit == u16::from(b'"') {
+            for _ in 0..(slashes * 2 + 1) {
+                out.push(u16::from(b'\\'));
+            }
+            out.push(unit);
+            slashes = 0;
+            continue;
+        }
+        for _ in 0..slashes {
+            out.push(u16::from(b'\\'));
+        }
+        slashes = 0;
+        out.push(unit);
+    }
+    for _ in 0..(slashes * 2) {
+        out.push(u16::from(b'\\'));
+    }
+    out.push(u16::from(b'"'));
+}
+
+#[cfg(windows)]
+fn command_line_units(program: &Path, args: &[String]) -> Vec<u16> {
+    let mut units = Vec::new();
+    push_quoted(&mut units, program.as_os_str());
+    for arg in args {
+        units.push(u16::from(b' '));
+        push_quoted(&mut units, std::ffi::OsStr::new(arg));
+    }
+    units.push(0);
+    units
+}
+
+#[cfg(all(windows, test))]
+fn command_line_string(program: &Path, args: &[String]) -> String {
+    String::from_utf16_lossy(&command_line_units(program, args))
+        .trim_end_matches('\0')
+        .to_string()
+}
+
+/// Attach the child to a hidden pseudoconsole. No shell and no new environment.
+///
+/// A pipe is not a console, so CPython would block-buffer stdout until the first
+/// flush. The pseudoconsole is the console the child sees. This process reads
+/// the console output pipe. `CREATE_NO_WINDOW` is not used: it would detach that
+/// console.
+#[cfg(windows)]
+fn spawn_console_session(request: LaunchRequest) -> Result<LiveSession, &'static str> {
+    use std::os::windows::io::{FromRawHandle, OwnedHandle};
+
+    /// Closes every handle still owned here. Success takes the live handles out first.
+    struct OwnedSpawn {
+        input_read: *mut c_void,
+        input_write: *mut c_void,
+        output_read: *mut c_void,
+        output_write: *mut c_void,
+        console: *mut c_void,
+        list: *mut u8,
+        layout: Option<std::alloc::Layout>,
+        list_ready: bool,
+        process: *mut c_void,
+        thread: *mut c_void,
+    }
+
+    impl Drop for OwnedSpawn {
+        fn drop(&mut self) {
+            close_handle(self.input_read);
+            close_handle(self.input_write);
+            close_handle(self.output_read);
+            close_handle(self.output_write);
+            close_handle(self.thread);
+            if !self.process.is_null() {
+                unsafe {
+                    TerminateProcess(self.process, 1);
+                }
+                close_handle(self.process);
+            }
+            if self.list_ready && !self.list.is_null() {
+                unsafe {
+                    DeleteProcThreadAttributeList(self.list.cast());
+                }
+            }
+            if let Some(layout) = self.layout
+                && !self.list.is_null()
+            {
+                unsafe {
+                    std::alloc::dealloc(self.list, layout);
+                }
+            }
+            if !self.console.is_null() {
+                unsafe {
+                    ClosePseudoConsole(self.console);
+                }
+            }
+        }
+    }
+
+    let mut owned = OwnedSpawn {
+        input_read: std::ptr::null_mut(),
+        input_write: std::ptr::null_mut(),
+        output_read: std::ptr::null_mut(),
+        output_write: std::ptr::null_mut(),
+        console: std::ptr::null_mut(),
+        list: std::ptr::null_mut(),
+        layout: None,
+        list_ready: false,
+        process: std::ptr::null_mut(),
+        thread: std::ptr::null_mut(),
+    };
+    unsafe {
+        let mut security = SecurityAttributes {
+            length: u32::try_from(size_of::<SecurityAttributes>()).unwrap_or(0),
+            _pad: 0,
+            descriptor: std::ptr::null_mut(),
+            inherit: 1,
+            _pad2: 0,
+        };
+        let pipe_in = CreatePipe(
+            &raw mut owned.input_read,
+            &raw mut owned.input_write,
+            &raw mut security,
+            0,
+        );
+        let pipe_out = CreatePipe(
+            &raw mut owned.output_read,
+            &raw mut owned.output_write,
+            &raw mut security,
+            0,
+        );
+        let created = CreatePseudoConsole(
+            (50u32 << 16) | 240,
+            owned.input_read,
+            owned.output_write,
+            0,
+            &raw mut owned.console,
+        );
+        // Conhost already holds its own copies. These ends belong to this process only.
+        close_handle(owned.input_read);
+        owned.input_read = std::ptr::null_mut();
+        close_handle(owned.output_write);
+        owned.output_write = std::ptr::null_mut();
+        if pipe_in == 0 || pipe_out == 0 || created < 0 || owned.console.is_null() {
+            return Err(START_FAILED);
+        }
+        let mut bytes = 0usize;
+        InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &raw mut bytes);
+        let Ok(layout) = std::alloc::Layout::from_size_align(bytes, 16) else {
+            return Err(START_FAILED);
+        };
+        owned.layout = Some(layout);
+        owned.list = std::alloc::alloc(layout);
+        if owned.list.is_null() {
+            return Err(START_FAILED);
+        }
+        let init = InitializeProcThreadAttributeList(owned.list.cast(), 1, 0, &raw mut bytes);
+        if init == 0 {
+            return Err(START_FAILED);
+        }
+        owned.list_ready = true;
+        // The handle value itself. A pointer to the local is a different address, and
+        // the child then starts without this console.
+        let updated = UpdateProcThreadAttribute(
+            owned.list.cast(),
+            0,
+            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
+            owned.console,
+            size_of::<*mut c_void>(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        );
+        if updated == 0 {
+            return Err(START_FAILED);
+        }
+        let mut startup: StartupInfoExW = std::mem::zeroed();
+        startup.startup.cb = u32::try_from(size_of::<StartupInfoExW>()).unwrap_or(0);
+        startup.attributes = owned.list.cast();
+        // Invalid standard handles force the child onto the pseudoconsole. Leaving
+        // them unset keeps this process's console, so the pipe never sees the banner.
+        startup.startup.flags = STARTF_USESTDHANDLES;
+        let invalid = (-1isize) as *mut c_void;
+        startup.startup.std_input = invalid;
+        startup.startup.std_output = invalid;
+        startup.startup.std_error = invalid;
+        let program = wide_units(request.program.as_os_str());
+        let mut command = command_line_units(&request.program, &request.args);
+        let cwd = cwd_units(&request.cwd);
+        let mut info = ProcessInformation {
+            process: std::ptr::null_mut(),
+            thread: std::ptr::null_mut(),
+            pid: 0,
+            tid: 0,
+        };
+        let started = CreateProcessW(
+            program.as_ptr(),
+            command.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+            EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
+            std::ptr::null_mut(),
+            cwd.as_ptr(),
+            (&raw mut startup).cast(),
+            &raw mut info,
+        );
+        if started == 0 {
+            return Err(START_FAILED);
+        }
+        owned.process = info.process;
+        owned.thread = info.thread;
+        let job = assign_kill_on_close(owned.process);
+        let resumed = ResumeThread(owned.thread);
+        if resumed == u32::MAX {
+            return Err(START_FAILED);
+        }
+        let output_read = owned.output_read;
+        owned.output_read = std::ptr::null_mut();
+        let input_write = owned.input_write;
+        owned.input_write = std::ptr::null_mut();
+        let console = owned.console;
+        owned.console = std::ptr::null_mut();
+        let process = owned.process;
+        owned.process = std::ptr::null_mut();
+        let thread = owned.thread;
+        owned.thread = std::ptr::null_mut();
+        close_handle(thread);
+        let output = std::fs::File::from(OwnedHandle::from_raw_handle(output_read));
+        let lines = Arc::new(Mutex::new(VecDeque::new()));
+        let readers_left = Arc::new(AtomicUsize::new(0));
+        let readers = vec![spawn_reader(output, &lines, &readers_left)];
+        Ok(LiveSession {
+            process: Some(TrackedProcess { handle: process }),
+            console: Some(HiddenConsole {
+                handle: console,
+                input_write,
+            }),
+            lines,
+            readers,
+            readers_left,
+            exit_code: None,
+            job,
+        })
+    }
+}
 #[cfg(windows)]
 struct Job {
     handle: *mut c_void,
@@ -538,8 +1158,7 @@ impl Drop for Job {
 }
 
 #[cfg(windows)]
-fn assign_kill_on_close(child: &Child) -> Option<Job> {
-    use std::os::windows::io::AsRawHandle;
+fn assign_kill_on_close(process: *mut c_void) -> Option<Job> {
     // SAFETY: the job handle is checked for null, the limit struct matches the Win32 layout,
     // and the process handle comes from the child we just spawned. On failure the job is closed.
     unsafe {
@@ -578,7 +1197,7 @@ fn assign_kill_on_close(child: &Child) -> Option<Job> {
             (&raw mut info).cast(),
             u32::try_from(size_of::<JobExtendedLimit>()).unwrap_or(0),
         );
-        if set == 0 || AssignProcessToJobObject(handle, child.as_raw_handle()) == 0 {
+        if set == 0 || AssignProcessToJobObject(handle, process) == 0 {
             CloseHandle(handle);
             return None;
         }
@@ -628,15 +1247,61 @@ unsafe extern "system" {
     fn AssignProcessToJobObject(job: *mut c_void, process: *mut c_void) -> i32;
     fn TerminateJobObject(job: *mut c_void, code: u32) -> i32;
     fn CloseHandle(handle: *mut c_void) -> i32;
+    fn CreatePipe(
+        read: *mut *mut c_void,
+        write: *mut *mut c_void,
+        attributes: *mut SecurityAttributes,
+        size: u32,
+    ) -> i32;
+    fn CreatePseudoConsole(
+        size: u32,
+        input: *mut c_void,
+        output: *mut c_void,
+        flags: u32,
+        console: *mut *mut c_void,
+    ) -> i32;
+    fn ClosePseudoConsole(console: *mut c_void);
+    fn InitializeProcThreadAttributeList(
+        list: *mut c_void,
+        count: u32,
+        flags: u32,
+        bytes: *mut usize,
+    ) -> i32;
+    fn UpdateProcThreadAttribute(
+        list: *mut c_void,
+        flags: u32,
+        attribute: usize,
+        value: *mut c_void,
+        size: usize,
+        previous: *mut c_void,
+        returned: *mut usize,
+    ) -> i32;
+    fn DeleteProcThreadAttributeList(list: *mut c_void);
+    fn CreateProcessW(
+        application: *const u16,
+        command: *mut u16,
+        process_attributes: *mut c_void,
+        thread_attributes: *mut c_void,
+        inherit: i32,
+        flags: u32,
+        environment: *mut c_void,
+        cwd: *const u16,
+        startup: *mut StartupInfoW,
+        process: *mut ProcessInformation,
+    ) -> i32;
+    fn WaitForSingleObject(handle: *mut c_void, millis: u32) -> u32;
+    fn GetExitCodeProcess(handle: *mut c_void, code: *mut u32) -> i32;
+    fn TerminateProcess(handle: *mut c_void, code: u32) -> i32;
+    fn ResumeThread(thread: *mut c_void) -> u32;
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         BAD_ARGUMENT, BAD_STEPS, LOG_CAP, LaunchRequest, LogPump, LogUpdate, NEED_DATA,
-        NO_CHECKPOINT, OPEN_FOLDER, PARTIAL_CAP, SELECT_RUN, START_FAILED, Session,
+        NO_CHECKPOINT, OPEN_FOLDER, PARTIAL_CAP, SELECT_RUN, START_FAILED, Session, ToolAnswer,
         apply_log_update, bust_tool_cache, eval_args, exit_note, export_args, find_backprop,
-        installed_backprop, push_shared, remember_line, spawn_session, start_installed, train_args,
+        push_shared, remember_line, spawn_session, start_installed, tool_answer, train_args,
     };
     use std::collections::VecDeque;
     use std::path::{Path, PathBuf};
@@ -1036,18 +1701,31 @@ mod tests {
         assert!(collapsed);
     }
 
+    fn settled_backprop() -> Option<PathBuf> {
+        let started = std::time::Instant::now();
+        loop {
+            match tool_answer() {
+                ToolAnswer::Ready(path) => return path,
+                ToolAnswer::Pending => {
+                    assert!(started.elapsed() < std::time::Duration::from_secs(8));
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+        }
+    }
+
     #[test]
     fn the_tool_lookup_is_stable_until_the_cache_is_cleared() {
-        let first = installed_backprop();
-        let second = installed_backprop();
+        let first = settled_backprop();
+        let second = settled_backprop();
         assert!(first == second);
         bust_tool_cache();
-        let _third = installed_backprop();
+        let _third = tool_answer();
     }
 
     #[test]
     fn the_installed_lookup_is_an_exe_or_absent() {
-        let found = installed_backprop();
+        let found = settled_backprop();
         let name = file_name(found.as_deref());
         assert!(
             name.is_none()
@@ -1084,20 +1762,25 @@ mod tests {
             Ok(session) => session,
             Err(_) => panic!("where"),
         };
-        let mut lines = 0usize;
+        let mut logged = String::new();
         let mut code = None;
         for _ in 0..50 {
-            lines += session.take_lines().len();
+            for update in session.take_lines() {
+                let text = match update {
+                    LogUpdate::Commit(text) | LogUpdate::Revise(text) => text,
+                };
+                logged.push_str(&text);
+            }
             if code.is_none() {
                 code = session.finished();
             }
-            if code.is_some() && lines > 0 {
+            if code.is_some() && logged.contains("WHERE") {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        assert!(code.is_some());
-        assert!(lines > 0);
+        let copied = code.is_some() && logged.contains("WHERE");
+        assert!(copied);
     }
 
     #[cfg(windows)]
@@ -1112,8 +1795,24 @@ mod tests {
             Err(_) => panic!("ping"),
         };
         assert!(session.job.is_some());
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        assert!(session.finished().is_none());
+        let mut logged = String::new();
+        for _ in 0..40 {
+            for update in session.take_lines() {
+                let text = match update {
+                    LogUpdate::Commit(text) | LogUpdate::Revise(text) => text,
+                };
+                logged.push_str(&text);
+            }
+            if logged.to_ascii_lowercase().contains("ping") && session.finished().is_none() {
+                break;
+            }
+            if session.finished().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let alive = session.finished().is_none() && logged.to_ascii_lowercase().contains("ping");
+        assert!(alive);
         session.stop();
         let mut ended = false;
         for _ in 0..80 {
@@ -1136,5 +1835,182 @@ mod tests {
             24
         );
         assert_eq!(size_of::<super::JobExtendedLimit>(), 144);
+    }
+
+    #[test]
+    fn console_control_sequences_do_not_stay_in_the_line() {
+        let lines = lines_from(b"\x1b[?25hbanner\x1b[0m\n");
+        let clean = lines.len() == 1 && lines.first().map(String::as_str) == Some("banner");
+        assert!(clean);
+    }
+
+    struct ClearDelay;
+
+    impl Drop for ClearDelay {
+        fn drop(&mut self) {
+            super::STAT_DELAY_MS.store(0, Ordering::Release);
+        }
+    }
+
+    fn wait_ready_locked() -> Option<PathBuf> {
+        let started = std::time::Instant::now();
+        loop {
+            match super::tool_answer_locked() {
+                ToolAnswer::Ready(path) => return path,
+                ToolAnswer::Pending => {
+                    assert!(started.elapsed() < std::time::Duration::from_secs(8));
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_expired_lookup_does_not_stat_on_the_caller() {
+        let _gate = super::cache_gate();
+        let _clear = ClearDelay;
+        let first = wait_ready_locked();
+        super::expire_tool_cache_for_test();
+        super::stat_threads()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .clear();
+        super::STAT_DELAY_MS.store(300, Ordering::Release);
+        let began = std::time::Instant::now();
+        let again = super::tool_answer_locked();
+        let quick = began.elapsed() < std::time::Duration::from_millis(80);
+        let same = matches!(again, ToolAnswer::Ready(path) if path == first);
+        assert!(quick && same);
+        let caller = std::thread::current().id();
+        let mut off_thread = false;
+        for _ in 0..50 {
+            let ids = super::stat_threads()
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .clone();
+            if ids.iter().any(|id| *id != caller) {
+                off_thread = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(off_thread);
+    }
+
+    #[test]
+    fn a_cleared_lookup_stays_pending_until_the_walk_finishes() {
+        let _gate = super::cache_gate();
+        let _clear = ClearDelay;
+        let _settled = wait_ready_locked();
+        super::stat_threads()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .clear();
+        super::STAT_DELAY_MS.store(250, Ordering::Release);
+        super::bust_tool_cache_locked();
+        let began = std::time::Instant::now();
+        let answer = super::tool_answer_locked();
+        let pending_now = began.elapsed() < std::time::Duration::from_millis(80)
+            && matches!(answer, ToolAnswer::Pending);
+        assert!(pending_now);
+        let caller = std::thread::current().id();
+        let mut ready = false;
+        let mut off_thread = false;
+        for _ in 0..50 {
+            let ids = super::stat_threads()
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .clone();
+            if ids.iter().any(|id| *id != caller) {
+                off_thread = true;
+            }
+            if matches!(super::tool_answer_locked(), ToolAnswer::Ready(_)) {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(ready && off_thread);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_program_path_with_spaces_is_quoted_on_the_command_line() {
+        let line = super::command_line_string(
+            Path::new("C:\\Program Files\\backprop.exe"),
+            &["train".to_string(), "my file".to_string()],
+        );
+        let quoted = line == "\"C:\\Program Files\\backprop.exe\" train \"my file\""
+            && !line.contains("cmd.exe")
+            && !line.contains("PYTHONUNBUFFERED");
+        assert!(quoted);
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn the_pseudoconsole_startup_matches_the_os_layout() {
+        let startup = size_of::<super::StartupInfoW>() == 104
+            && std::mem::offset_of!(super::StartupInfoW, cb) == 0
+            && std::mem::offset_of!(super::StartupInfoW, std_input) == 80
+            && std::mem::offset_of!(super::StartupInfoW, std_output) == 88
+            && std::mem::offset_of!(super::StartupInfoW, std_error) == 96
+            && size_of::<super::StartupInfoExW>() == 112
+            && size_of::<super::ProcessInformation>() == 24
+            && size_of::<super::SecurityAttributes>() == 24
+            && size_of::<super::Coord>() == 4;
+        assert!(startup);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_console_banner_shows_before_the_process_exits() {
+        let dir = scratch("banner-child");
+        let source = dir.join("child.rs");
+        std::fs::write(
+            &source,
+            "fn main() {\n    println!(\"banner\");\n    std::thread::sleep(std::time::Duration::from_secs(30));\n}\n",
+        )
+        .unwrap();
+        let exe = dir.join("child.exe");
+        let rustc = PathBuf::from(env!("CARGO")).with_file_name("rustc.exe");
+        let compiled = std::process::Command::new(rustc)
+            .arg(&source)
+            .arg("-o")
+            .arg(&exe)
+            .status();
+        let Ok(status) = compiled else {
+            panic!("rustc");
+        };
+        assert!(status.success());
+        let mut session = match spawn_session(LaunchRequest {
+            program: exe,
+            args: Vec::new(),
+            cwd: dir,
+        }) {
+            Ok(session) => session,
+            Err(_) => panic!("spawn"),
+        };
+        let mut saw = false;
+        let mut still_running = false;
+        for _ in 0..100 {
+            for update in session.take_lines() {
+                let text = match update {
+                    LogUpdate::Commit(text) | LogUpdate::Revise(text) => text,
+                };
+                if text == "banner" {
+                    saw = true;
+                }
+            }
+            if saw && session.finished().is_none() {
+                still_running = true;
+                break;
+            }
+            if session.finished().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(saw && still_running);
+        session.stop();
     }
 }
