@@ -12,7 +12,7 @@
   <Properties>
     <DisplayName>RunForge</DisplayName>
     <PublisherDisplayName>mcp-tool-shop</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.scale-200.png</Logo>
+    <Logo>Assets\StoreLogo.png</Logo>
     <Description>Windows bench for a backpropagate run folder.</Description>
   </Properties>
 
@@ -23,6 +23,7 @@
 
   <Resources>
     <Resource Language="en-us" />
+    <Resource uap:Scale="100" />
     <Resource uap:Scale="200" />
   </Resources>
 
@@ -32,12 +33,12 @@
         DisplayName="RunForge"
         Description="Open a backpropagate run folder and read the stored loss."
         BackgroundColor="#1A1B1A"
-        Square150x150Logo="Assets\Square150x150Logo.scale-200.png"
-        Square44x44Logo="Assets\Square44x44Logo.scale-200.png">
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile
-          Wide310x150Logo="Assets\Wide310x150Logo.scale-200.png"
-          Square310x310Logo="Assets\Square310x310Logo.scale-200.png"
-          Square71x71Logo="Assets\Square71x71Logo.scale-200.png"
+          Wide310x150Logo="Assets\Wide310x150Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png"
+          Square71x71Logo="Assets\Square71x71Logo.png"
           ShortName="RunForge">
           <uap:ShowNameOnTiles>
             <uap:ShowOn Tile="square150x150Logo" />
@@ -45,7 +46,7 @@
             <uap:ShowOn Tile="square310x310Logo" />
           </uap:ShowNameOnTiles>
         </uap:DefaultTile>
-        <uap:SplashScreen Image="Assets\SplashScreen.scale-200.png" BackgroundColor="#1A1B1A" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#1A1B1A" />
       </uap:VisualElements>
     </Application>
   </Applications>

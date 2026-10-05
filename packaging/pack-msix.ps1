@@ -1,6 +1,9 @@
 # Packs runforge.exe into an unsigned MSIX for product 9PHL1HX0CGMF.
 # Partner Center signs the upload. This script does not sign, and it refuses
 # a package whose identity drifted or that vendors the trainer.
+# Logo names in the manifest are unqualified. makepri writes resources.pri
+# so those names resolve to the scale-100 and scale-200 files. The config
+# stays out of the package.
 #Requires -Version 7
 param(
     [string]$Exe,
@@ -23,7 +26,7 @@ $ExpectedPublisherDisplay = 'mcp-tool-shop'
 $ExpectedVersion = '2.0.0.0'
 $VersionFloor = [version]'1.0.1.0'
 
-function Find-MakeAppx {
+function Find-SdkBin {
     $roots = @(
         (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'),
         (Join-Path $env:ProgramFiles 'Windows Kits\10\bin')
@@ -38,7 +41,158 @@ function Find-MakeAppx {
     if (-not $best) {
         throw 'makeappx.exe (x64) was not found. Install the Windows 10 SDK.'
     }
-    return $best.FullName
+    return $best.DirectoryName
+}
+
+function Assert-TileSizes([string]$Assets) {
+    Add-Type -AssemblyName System.Drawing
+    $expected = @(
+        @{ Name = 'StoreLogo.scale-100.png'; W = 50; H = 50 },
+        @{ Name = 'StoreLogo.scale-200.png'; W = 100; H = 100 },
+        @{ Name = 'Square44x44Logo.scale-100.png'; W = 44; H = 44 },
+        @{ Name = 'Square44x44Logo.scale-200.png'; W = 88; H = 88 },
+        @{ Name = 'Square71x71Logo.scale-100.png'; W = 71; H = 71 },
+        @{ Name = 'Square71x71Logo.scale-200.png'; W = 142; H = 142 },
+        @{ Name = 'Square150x150Logo.scale-100.png'; W = 150; H = 150 },
+        @{ Name = 'Square150x150Logo.scale-200.png'; W = 300; H = 300 },
+        @{ Name = 'Wide310x150Logo.scale-100.png'; W = 310; H = 150 },
+        @{ Name = 'Wide310x150Logo.scale-200.png'; W = 620; H = 300 },
+        @{ Name = 'Square310x310Logo.scale-100.png'; W = 310; H = 310 },
+        @{ Name = 'Square310x310Logo.scale-200.png'; W = 620; H = 620 },
+        @{ Name = 'SplashScreen.scale-100.png'; W = 620; H = 300 },
+        @{ Name = 'SplashScreen.scale-200.png'; W = 1240; H = 600 }
+    )
+    foreach ($tile in $expected) {
+        $path = Join-Path $Assets $tile.Name
+        if (-not (Test-Path $path)) { throw "Missing tile $($tile.Name)" }
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path $path))
+        try {
+            if ($img.Width -ne $tile.W -or $img.Height -ne $tile.H) {
+                throw "$($tile.Name) is $($img.Width)x$($img.Height); expected $($tile.W)x$($tile.H)"
+            }
+        } finally {
+            $img.Dispose()
+        }
+    }
+}
+
+function Get-PeSubsystem([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $reader = New-Object System.IO.BinaryReader($stream)
+        $stream.Position = 0x3C
+        $pe = $reader.ReadInt32()
+        if ($pe -le 0) { throw "PE header offset is invalid in $Path" }
+        $stream.Position = $pe
+        $signature = $reader.ReadUInt32()
+        if ($signature -ne 0x00004550) { throw "PE signature is missing in $Path" }
+        $stream.Position = $pe + 24
+        $magic = $reader.ReadUInt16()
+        if ($magic -ne 0x20B) { throw "Expected a PE32+ binary, found magic $magic" }
+        $stream.Position = $pe + 24 + 68
+        return $reader.ReadUInt16()
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Assert-StoreBinary([string]$Path, [string]$Mt) {
+    $subsystem = Get-PeSubsystem $Path
+    if ($subsystem -ne 2) {
+        throw "runforge.exe subsystem is $subsystem. The Store build must be a window (2), not a console (3)."
+    }
+    $extracted = Join-Path $env:TEMP ('runforge-embedded-' + [guid]::NewGuid().ToString('n') + '.manifest')
+    try {
+        & $Mt -nologo "-inputresource:${Path};#1" "-out:$extracted"
+        if ($LASTEXITCODE -ne 0) { throw "mt.exe could not read the embedded manifest (exit $LASTEXITCODE)" }
+        if (-not (Test-Path $extracted)) { throw 'mt.exe did not write the embedded manifest' }
+        $text = Get-Content -Path $extracted -Raw
+        if ($text -notmatch 'PerMonitorV2') { throw 'Embedded manifest is missing PerMonitorV2 DPI awareness.' }
+        if ($text -notmatch 'dpiAware') { throw 'Embedded manifest is missing dpiAware.' }
+        if ($text -notmatch 'asInvoker') { throw 'Embedded manifest is missing asInvoker.' }
+    } finally {
+        if (Test-Path $extracted) { Remove-Item -Force $extracted }
+    }
+}
+
+function Add-ResourceIndex([string]$Stage, [string]$MakePri) {
+    # The config is a build input. It is written outside the stage so the
+    # package cannot pick it up.
+    $work = Join-Path $env:TEMP ('runforge-pri-' + [guid]::NewGuid().ToString('n'))
+    New-Item -ItemType Directory -Path $work | Out-Null
+    $config = Join-Path $work 'priconfig.xml'
+    try {
+        & $MakePri createconfig /cf $config /dq en-US /o
+        if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed with exit $LASTEXITCODE" }
+        [xml]$doc = Get-Content -Path $config -Raw
+        $index = $doc.SelectSingleNode('/resources/index')
+        if (-not $index) { throw 'makepri config has no index element.' }
+        $folder = $index.SelectSingleNode('indexer-config[@type="folder"]')
+        if (-not $folder) { throw 'makepri config has no folder indexer.' }
+        # License filenames contain dots. Indexing them makes makepri treat
+        # those dots as qualifiers. The index stays at the package root so
+        # the resource names keep the Assets folder the manifest names.
+        foreach ($exclude in @(
+                @{ Type = 'extension'; Value = '.exe' },
+                @{ Type = 'extension'; Value = '.pri' },
+                @{ Type = 'extension'; Value = '.xml' },
+                @{ Type = 'path'; Value = '\licenses' },
+                @{ Type = 'path'; Value = '\NOTICE' },
+                @{ Type = 'path'; Value = '\LICENSE' }
+            )) {
+            $node = $doc.CreateElement('exclude')
+            $node.SetAttribute('type', $exclude.Type)
+            $node.SetAttribute('value', $exclude.Value)
+            $node.SetAttribute('doNotIndex', 'true')
+            $node.SetAttribute('doNotTraverse', 'true')
+            [void]$folder.AppendChild($node)
+        }
+        $scoped = Join-Path $work 'priconfig-assets.xml'
+        $doc.Save($scoped)
+        $pri = Join-Path $Stage 'resources.pri'
+        $manifest = Join-Path $Stage 'AppxManifest.xml'
+        $lines = @(& $MakePri new /pr $Stage /cf $scoped /mn $manifest /of $pri /o 2>&1 | ForEach-Object { "$_" })
+        $lines | ForEach-Object { Write-Output $_ }
+        if ($LASTEXITCODE -ne 0) { throw "makepri new failed with exit $LASTEXITCODE" }
+        # makepri also writes straight to the console, so the count is read
+        # from the resource index itself. Seven named resources, seven candidates.
+        $dump = Join-Path $work 'resources.pri.xml'
+        & $MakePri dump /if $pri /of $dump | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "makepri dump failed with exit $LASTEXITCODE" }
+        [xml]$priXml = Get-Content -Path $dump -Raw
+        $resources = @($priXml.SelectNodes('//NamedResource'))
+        $expectedNames = @(
+            'SplashScreen.png',
+            'Square150x150Logo.png',
+            'Square310x310Logo.png',
+            'Square44x44Logo.png',
+            'Square71x71Logo.png',
+            'StoreLogo.png',
+            'Wide310x150Logo.png'
+        )
+        $names = @($resources | ForEach-Object { $_.name })
+        $missing = @($expectedNames | Where-Object { $names -notcontains $_ })
+        $extra = @($names | Where-Object { $expectedNames -notcontains $_ })
+        $badUri = @($resources | Where-Object { $_.uri -notmatch '/Files/Assets/' })
+        if ($missing.Count -gt 0 -or $extra.Count -gt 0 -or $badUri.Count -gt 0) {
+            throw "Resource index names drifted. Missing: $($missing -join ', '). Extra: $($extra -join ', ')."
+        }
+        if (-not (Test-Path $pri)) { throw 'makepri did not write resources.pri' }
+        $scale200 = Join-Path $Stage 'resources.scale-200.pri'
+        if (-not (Test-Path $scale200)) { throw 'makepri did not write resources.scale-200.pri' }
+        $leaked = Join-Path $Stage 'priconfig.xml'
+        if (Test-Path $leaked) { Remove-Item -Force $leaked }
+    } finally {
+        if (Test-Path $work) { Remove-Item -Recurse -Force $work }
+    }
+}
+
+function Test-Listed([string[]]$Listing, [string]$Name) {
+    foreach ($entry in $Listing) {
+        $normalized = ($entry -replace '\\', '/').Trim()
+        if ($normalized -eq $Name -or $normalized.EndsWith("/$Name")) { return $true }
+    }
+    return $false
 }
 
 function Read-Identity([string]$Path) {
@@ -214,6 +368,7 @@ if (-not (Test-Path $Manifest)) { throw "Missing $Manifest" }
 
 $sourceId = Read-Identity $Manifest
 Assert-Identity $sourceId 'packaging/msix/AppxManifest.xml'
+Assert-TileSizes (Join-Path $Template 'Assets')
 
 if (-not $Exe) { $Exe = Find-Exe }
 if (-not (Test-Path $Exe)) { throw "Executable not found: $Exe" }
@@ -228,25 +383,47 @@ if (-not $Out) {
     $Out = Join-Path $releaseDir 'RunForge_2.0.0.0_x64.msix'
 }
 
-$makeappx = Find-MakeAppx
+$sdkBin = Find-SdkBin
+$makeappx = Join-Path $sdkBin 'makeappx.exe'
+$makepri = Join-Path $sdkBin 'makepri.exe'
+$mt = Join-Path $sdkBin 'mt.exe'
+foreach ($tool in @($makeappx, $makepri, $mt)) {
+    if (-not (Test-Path $tool)) { throw "SDK tool is missing: $tool" }
+}
 $stage = Join-Path $env:TEMP ('runforge-msix-stage-' + [guid]::NewGuid().ToString('n'))
 $check = Join-Path $env:TEMP ('runforge-msix-check-' + [guid]::NewGuid().ToString('n'))
 
+$packed = $false
 try {
     New-Item -ItemType Directory -Path $stage | Out-Null
     Copy-Item -Path (Join-Path $Template '*') -Destination $stage -Recurse -Force
     Copy-Item -Path $Exe -Destination (Join-Path $stage $ExpectedExe) -Force
     Add-Notices $stage
+    Assert-StoreBinary (Join-Path $stage $ExpectedExe) $mt
+    Add-ResourceIndex $stage $makepri
 
+    if (Test-Path $Out) { Remove-Item -Force $Out }
     & $makeappx pack /o /d $stage /p $Out
-    if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed with exit $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path $Out) { Remove-Item -Force $Out }
+        throw "makeappx pack failed with exit $LASTEXITCODE"
+    }
+    $packed = $true
 
     $listing = @(& tar -tf $Out)
     if ($listing -match 'AppxSignature\.p7x') {
         throw 'Package contains AppxSignature.p7x. The Store upload must be unsigned.'
     }
-    if ($listing -notcontains $ExpectedExe) {
+    if (-not (Test-Listed $listing $ExpectedExe)) {
         throw "Packed archive is missing $ExpectedExe"
+    }
+    foreach ($required in @('resources.pri', 'resources.scale-200.pri')) {
+        if (-not (Test-Listed $listing $required)) {
+            throw "Packed archive is missing $required"
+        }
+    }
+    if ($listing -match '(?i)priconfig\.xml') {
+        throw 'Package contains priconfig.xml. That file is a build input, not a payload.'
     }
     Assert-Layout $listing
 
@@ -254,8 +431,10 @@ try {
     & tar -xf $Out -C $check AppxManifest.xml
     $packedId = Read-Identity (Join-Path $check 'AppxManifest.xml')
     Assert-Identity $packedId 'packed AppxManifest.xml'
-}
-finally {
+} catch {
+    if ($packed -and (Test-Path $Out)) { Remove-Item -Force $Out }
+    throw
+} finally {
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
     if (Test-Path $check) { Remove-Item -Recurse -Force $check }
 }
