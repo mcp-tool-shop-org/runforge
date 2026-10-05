@@ -1,5 +1,7 @@
 <p align="center"><img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/runforge/readme.png" alt="RunForge" width="720"></p>
 
+<p align="center"><img src="docs/bench-dark.png" alt="The RunForge window in the dark theme, open on a fixture folder" width="720"></p>
+
 # RunForge
 
 RunForge is the Windows bench for a [backpropagate](https://github.com/mcp-tool-shop-org/backpropagate) output folder. Open the folder that contains `run_history.json`, or the folder above an `output` directory. The window lists the runs, draws the stored loss, compares two rows, and exports the table or the curve.

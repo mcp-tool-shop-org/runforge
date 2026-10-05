@@ -290,6 +290,14 @@ fn finish_walk(generation: u64, found: Option<PathBuf>) {
     guard.walking = None;
 }
 
+// Test-only gate, captured on the spawning thread and moved into that one
+// reader. A process-wide flag would stall readers in parallel tests.
+#[cfg(test)]
+thread_local! {
+    static READER_HOLD: std::cell::RefCell<Option<Arc<AtomicBool>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 #[cfg(test)]
 static STAT_DELAY_MS: AtomicU64 = AtomicU64::new(0);
 
@@ -393,6 +401,7 @@ fn spawn_piped_session(request: LaunchRequest) -> Result<LiveSession, &'static s
         readers,
         readers_left,
         exit_code: None,
+        pending_exit: None,
     })
 }
 
@@ -533,13 +542,28 @@ where
     readers_left.fetch_add(1, Ordering::Relaxed);
     let lines = Arc::clone(lines);
     let readers_left = Arc::clone(readers_left);
+    #[cfg(test)]
+    let hold = READER_HOLD.with(|slot| slot.borrow().clone());
     thread::spawn(move || {
         let mut buffered = BufReader::new(reader);
         let mut pump = LogPump::new();
         while let Some(update) = pump.next(&mut buffered) {
             push_shared(&lines, update);
         }
-        readers_left.fetch_sub(1, Ordering::Relaxed);
+        // The hold sits after the pipe is drained and before the count drops,
+        // so a test can observe an exited process whose last line is not yet
+        // published. Production builds have no hold.
+        #[cfg(test)]
+        if let Some(hold) = hold {
+            while hold.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(5));
+            }
+            push_shared(&lines, LogUpdate::Commit("late-line".to_string()));
+        }
+        // Release pairs with the acquire in `finished`. The push above
+        // happens-before that release, so the line is visible to the
+        // `take_lines` that runs once the count hits zero.
+        readers_left.fetch_sub(1, Ordering::Release);
     })
 }
 
@@ -616,6 +640,10 @@ pub(crate) struct LiveSession {
     readers: Vec<thread::JoinHandle<()>>,
     readers_left: Arc<AtomicUsize>,
     exit_code: Option<i32>,
+    /// The process has exited and the console is closed. The code stays here
+    /// until every reader has published, so the window is not told the
+    /// session is over while a line is still in flight.
+    pending_exit: Option<i32>,
     #[cfg(windows)]
     job: Option<Job>,
 }
@@ -633,33 +661,21 @@ impl Session for LiveSession {
         if let Some(code) = self.exit_code {
             return Some(code);
         }
-        #[cfg(windows)]
-        {
-            let handle = self.process.as_ref()?.handle;
-            let code = poll_process(handle)?;
-            // Closing the pseudoconsole lets the output pipe end, so the reader
-            // can finish the last line. The process has already exited.
-            self.console.take();
-            self.wait_for_readers();
-            self.exit_code = Some(code);
-            Some(code)
+        if self.pending_exit.is_none() {
+            let code = self.poll_exit()?;
+            // Closing the pseudoconsole lets the output pipe end. The process
+            // has already exited. Returning while a reader is still alive
+            // keeps this off the UI thread: the window polls again, and the
+            // next take reads the line the reader pushed before it finished.
+            self.release_console();
+            self.pending_exit = Some(code);
         }
-        #[cfg(not(windows))]
-        {
-            let child = self.child.as_mut()?;
-            let status = match child.try_wait() {
-                Ok(Some(status)) => status,
-                Ok(None) => return None,
-                Err(_) => {
-                    self.exit_code = Some(-1);
-                    return Some(-1);
-                }
-            };
-            self.wait_for_readers();
-            let code = status.code().unwrap_or(-1);
-            self.exit_code = Some(code);
-            Some(code)
+        if self.readers_left.load(Ordering::Acquire) > 0 {
+            return None;
         }
+        let code = self.pending_exit.take()?;
+        self.exit_code = Some(code);
+        Some(code)
     }
 
     fn stop(&mut self) {
@@ -702,14 +718,29 @@ impl Drop for LiveSession {
 }
 
 impl LiveSession {
-    fn wait_for_readers(&self) {
-        let start = Instant::now();
-        while self.readers_left.load(Ordering::Relaxed) > 0
-            && start.elapsed() < Duration::from_millis(500)
-        {
-            thread::sleep(Duration::from_millis(10));
+    #[cfg(windows)]
+    fn poll_exit(&mut self) -> Option<i32> {
+        let handle = self.process.as_ref()?.handle;
+        poll_process(handle)
+    }
+
+    #[cfg(not(windows))]
+    fn poll_exit(&mut self) -> Option<i32> {
+        let child = self.child.as_mut()?;
+        match child.try_wait() {
+            Ok(Some(status)) => Some(status.code().unwrap_or(-1)),
+            Ok(None) => None,
+            Err(_) => Some(-1),
         }
     }
+
+    #[cfg(windows)]
+    fn release_console(&mut self) {
+        self.console.take();
+    }
+
+    #[cfg(not(windows))]
+    fn release_console(&mut self) {}
 }
 
 #[cfg(windows)]
@@ -1138,6 +1169,7 @@ fn spawn_console_session(request: LaunchRequest) -> Result<LiveSession, &'static
             readers,
             readers_left,
             exit_code: None,
+            pending_exit: None,
             job,
         })
     }
@@ -1823,6 +1855,64 @@ mod tests {
         }
         let copied = code.is_some() && logged.contains("WHERE");
         assert!(copied);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_exit_keeps_the_late_line_without_sleeping() {
+        let hold = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        super::READER_HOLD.with(|slot| *slot.borrow_mut() = Some(std::sync::Arc::clone(&hold)));
+        struct Release(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::Release);
+                super::READER_HOLD.with(|slot| *slot.borrow_mut() = None);
+            }
+        }
+        let _release = Release(std::sync::Arc::clone(&hold));
+        let mut session = match spawn_session(LaunchRequest {
+            program: system_tool("where.exe"),
+            args: Vec::new(),
+            cwd: std::env::temp_dir(),
+        }) {
+            Ok(session) => session,
+            Err(_) => panic!("where"),
+        };
+        let mut prompt = false;
+        for _ in 0..50 {
+            let started = std::time::Instant::now();
+            let early = session.finished();
+            let quick = started.elapsed() < std::time::Duration::from_millis(100);
+            if session.pending_exit.is_some() {
+                prompt = early.is_none() && quick;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(prompt);
+        hold.store(false, std::sync::atomic::Ordering::Release);
+        let mut logged = String::new();
+        let mut code = None;
+        for _ in 0..50 {
+            let mut lines = session.take_lines();
+            let now = session.finished();
+            if now.is_some() {
+                lines.extend(session.take_lines());
+            }
+            for update in lines {
+                let text = match update {
+                    LogUpdate::Commit(text) | LogUpdate::Revise(text) => text,
+                };
+                logged.push_str(&text);
+            }
+            if now.is_some() {
+                code = now;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let kept = code.is_some() && logged.contains("late-line");
+        assert!(kept);
     }
 
     #[cfg(windows)]
