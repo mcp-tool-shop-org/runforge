@@ -20,8 +20,32 @@ use crate::launch::{
     exit_note, export_args, start_installed, tool_answer, train_args,
 };
 
-const CURVE: Color32 = Color32::from_rgb(0x4e, 0xcd, 0xc4);
-const CURVE_B: Color32 = Color32::from_rgb(0xff, 0x6b, 0x6b);
+struct Ink {
+    note: Color32,
+    failure: Color32,
+    curve: Color32,
+    curve_b: Color32,
+}
+
+/// Dark keeps the colors that already clear the dark fills. Light is a
+/// separate pair: text at 4.5:1 on panel gray 248, lines at 3:1 on white.
+fn ink(dark: bool) -> Ink {
+    if dark {
+        Ink {
+            note: Color32::from_rgb(0xff, 0xd9, 0x3d),
+            failure: Color32::from_rgb(0xff, 0x8a, 0x80),
+            curve: Color32::from_rgb(0x4e, 0xcd, 0xc4),
+            curve_b: Color32::from_rgb(0xff, 0x6b, 0x6b),
+        }
+    } else {
+        Ink {
+            note: Color32::from_rgb(0x6b, 0x44, 0x00),
+            failure: Color32::from_rgb(0xa3, 0x20, 0x20),
+            curve: Color32::from_rgb(0x0e, 0x6b, 0x66),
+            curve_b: Color32::from_rgb(0xb4, 0x23, 0x18),
+        }
+    }
+}
 
 struct Row {
     file_index: usize,
@@ -153,14 +177,18 @@ impl eframe::App for RunForgeApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_session();
         self.resume_held();
-        ui.ctx().set_visuals(match self.prefs.theme {
+        let visuals = match self.prefs.theme {
             Theme::Dark => egui::Visuals::dark(),
             Theme::Light => egui::Visuals::light(),
-        });
+        };
+        // The root Ui is built before this runs, so the context update only
+        // reaches the next frame. This frame's widgets read the Ui copy.
+        ui.ctx().set_visuals(visuals.clone());
+        *ui.visuals_mut() = visuals;
         egui::Panel::top("bar").show(ui, |ui| self.toolbar(ui));
         if !self.note.is_empty() {
             ui.add_space(4.0);
-            ui.label(RichText::new(&self.note).color(Color32::from_rgb(0xff, 0xd9, 0x3d)));
+            ui.label(RichText::new(&self.note).color(ink(ui.visuals().dark_mode).note));
         }
         if self.history.is_none() && self.session.is_none() {
             ui.add_space(24.0);
@@ -319,15 +347,33 @@ impl RunForgeApp {
             ui.label("Status, model, final loss, started. Newest first.");
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for row in &rows {
-                    ui.horizontal(|ui| {
-                        let chosen = self.selected == Some(row.file_index);
-                        if ui.selectable_label(chosen, &row.label).clicked() {
-                            self.selected = Some(row.file_index);
-                        }
-                        if ui.small_button("Compare").clicked() {
-                            self.arm_compare(row.file_index);
-                        }
-                    });
+                    // The list is 460px and does not scroll sideways. The label
+                    // gives up width so Compare stays inside the panel.
+                    let chosen = self.selected == Some(row.file_index);
+                    let mut select = false;
+                    let mut compare = false;
+                    egui::Sides::new().shrink_left().truncate().show(
+                        ui,
+                        |ui| {
+                            if ui
+                                .add(egui::Button::selectable(chosen, &row.label).truncate())
+                                .clicked()
+                            {
+                                select = true;
+                            }
+                        },
+                        |ui| {
+                            if ui.small_button("Compare").clicked() {
+                                compare = true;
+                            }
+                        },
+                    );
+                    if select {
+                        self.selected = Some(row.file_index);
+                    }
+                    if compare {
+                        self.arm_compare(row.file_index);
+                    }
                 }
             });
         });
@@ -608,6 +654,7 @@ fn notes(history: &History) -> Vec<String> {
 }
 
 fn draw_chart(ui: &mut egui::Ui, primary: &RunEntry, compare: Option<&RunEntry>) {
+    let ink = ink(ui.visuals().dark_mode);
     let primary_empty = finite_points(&primary.loss).is_empty();
     let compare_empty = compare.is_none_or(|entry| finite_points(&entry.loss).is_empty());
     if primary_empty && compare_empty {
@@ -619,9 +666,9 @@ fn draw_chart(ui: &mut egui::Ui, primary: &RunEntry, compare: Option<&RunEntry>)
             .x_axis_label("stored sample")
             .y_axis_label("loss")
             .show(ui, |plot| {
-                draw_series(plot, &primary.run_id, CURVE, &primary.loss);
+                draw_series(plot, &primary.run_id, ink.curve, &primary.loss);
                 if let Some(other) = compare {
-                    draw_series(plot, &other.run_id, CURVE_B, &other.loss);
+                    draw_series(plot, &other.run_id, ink.curve_b, &other.loss);
                 }
             });
     }
@@ -669,7 +716,7 @@ fn draw_entry(ui: &mut egui::Ui, entry: &RunEntry) {
         line(ui, "Exports", &entry.export_paths.join(", "));
     }
     if !entry.failure_reason.is_empty() {
-        ui.label(RichText::new(&entry.failure_reason).color(Color32::from_rgb(0xff, 0x8a, 0x80)));
+        ui.label(RichText::new(&entry.failure_reason).color(ink(ui.visuals().dark_mode).failure));
     }
     if let Some(eval) = &entry.eval_summary {
         draw_eval(ui, eval);
@@ -726,7 +773,7 @@ fn line(ui: &mut egui::Ui, name: &str, value: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::RunForgeApp;
+    use super::{RunForgeApp, ink};
     use crate::launch::{
         ALREADY_RUNNING, BAD_ARGUMENT, BAD_STEPS, LaunchRequest, LogUpdate, MISSING_TOOL,
         NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING, OPEN_FOLDER, SELECT_RUN, START_FAILED, Session,
@@ -1512,5 +1559,255 @@ mod tests {
             && app.session.is_some()
             && app.note != MISSING_TOOL;
         assert!(started);
+    }
+
+    fn channel(value: u8) -> f64 {
+        let unit = f64::from(value) / 255.0;
+        if unit <= 0.04045 {
+            unit / 12.92
+        } else {
+            ((unit + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    fn luminance(color: egui::Color32) -> f64 {
+        0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+    }
+
+    fn contrast(fg: egui::Color32, bg: egui::Color32) -> f64 {
+        let left = luminance(fg);
+        let right = luminance(bg);
+        let (lighter, darker) = if left >= right {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        (lighter + 0.05) / (darker + 0.05)
+    }
+
+    fn long_history() -> String {
+        r#"[
+            {"run_id":"short","status":"completed","model_name":"Alpha","started_at":"2026-05-21T04:54:14","final_loss":0.42,"loss_history":[0.5,0.4]},
+            {"run_id":"long","status":"completed","model_name":"qwen2.5-7b-instruct","started_at":"2026-05-21T04:54:14.646724","final_loss":1.234567,"loss_history":[1.2,0.8],"failure_reason":"boom"}
+        ]"#
+        .to_string()
+    }
+
+    fn open_long(name: &str) -> (RunForgeApp, Harness) {
+        let dir = scratch(name);
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("run_history.json"), long_history()).unwrap();
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        (app, ui)
+    }
+
+    fn node_rects(output: &egui::FullOutput, needle: &str, exact: bool) -> Vec<egui::Rect> {
+        let Some(update) = &output.platform_output.accesskit_update else {
+            return Vec::new();
+        };
+        let mut rects = Vec::new();
+        for (_, node) in &update.nodes {
+            let label = node.label().unwrap_or("");
+            let value = node.value().unwrap_or("");
+            let hit = if exact {
+                label == needle || value == needle
+            } else {
+                label.contains(needle) || value.contains(needle)
+            };
+            if !hit {
+                continue;
+            }
+            let Some(bounds) = node.bounds() else {
+                continue;
+            };
+            let width = (bounds.x1 - bounds.x0) as f32;
+            let height = (bounds.y1 - bounds.y0) as f32;
+            if width <= 0.0 || height <= 0.0 || width * height > 80_000.0 {
+                continue;
+            }
+            rects.push(egui::Rect::from_min_max(
+                egui::pos2(bounds.x0 as f32, bounds.y0 as f32),
+                egui::pos2(bounds.x1 as f32, bounds.y1 as f32),
+            ));
+        }
+        rects
+    }
+
+    fn click_pos(ui: &mut Harness, app: &mut RunForgeApp, pos: egui::Pos2) {
+        ui.show(app, vec![Event::PointerMoved(pos)])
+            .drop_without_applying_deltas();
+        ui.show(
+            app,
+            vec![Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::default(),
+            }],
+        )
+        .drop_without_applying_deltas();
+        ui.show(
+            app,
+            vec![Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Modifiers::default(),
+            }],
+        )
+        .drop_without_applying_deltas();
+    }
+
+    fn solid(mode: &egui::epaint::ColorMode, color: egui::Color32) -> bool {
+        matches!(mode, egui::epaint::ColorMode::Solid(solid) if *solid == color)
+    }
+
+    fn shape_has(shape: &egui::Shape, color: egui::Color32) -> bool {
+        match shape {
+            egui::Shape::Vec(inner) => inner.iter().any(|shape| shape_has(shape, color)),
+            egui::Shape::Circle(circle) => circle.fill == color || circle.stroke.color == color,
+            egui::Shape::Ellipse(ellipse) => ellipse.fill == color || ellipse.stroke.color == color,
+            egui::Shape::LineSegment { stroke, .. } => stroke.color == color,
+            egui::Shape::Path(path) => path.fill == color || solid(&path.stroke.color, color),
+            egui::Shape::Rect(rect) => rect.fill == color || rect.stroke.color == color,
+            egui::Shape::Text(text) => {
+                text.fallback_color == color
+                    || text.override_text_color == Some(color)
+                    || text
+                        .galley
+                        .job
+                        .sections
+                        .iter()
+                        .any(|section| section.format.color == color)
+            }
+            egui::Shape::Mesh(mesh) => mesh.vertices.iter().any(|vertex| vertex.color == color),
+            egui::Shape::QuadraticBezier(curve) => {
+                curve.fill == color || solid(&curve.stroke.color, color)
+            }
+            egui::Shape::CubicBezier(curve) => {
+                curve.fill == color || solid(&curve.stroke.color, color)
+            }
+            egui::Shape::Noop | egui::Shape::Callback(_) => false,
+        }
+    }
+
+    fn shape_uses(output: &egui::FullOutput, color: egui::Color32) -> bool {
+        output
+            .shapes
+            .iter()
+            .any(|clipped| shape_has(&clipped.shape, color))
+    }
+
+    fn text_uses(output: &egui::FullOutput, needle: &str, color: egui::Color32) -> bool {
+        fn walk(shape: &egui::Shape, needle: &str, color: egui::Color32) -> bool {
+            match shape {
+                egui::Shape::Vec(inner) => inner.iter().any(|shape| walk(shape, needle, color)),
+                egui::Shape::Text(text) => {
+                    let colored = text.fallback_color == color
+                        || text.override_text_color == Some(color)
+                        || text
+                            .galley
+                            .job
+                            .sections
+                            .iter()
+                            .any(|section| section.format.color == color);
+                    colored && text.galley.text().contains(needle)
+                }
+                _ => false,
+            }
+        }
+        output
+            .shapes
+            .iter()
+            .any(|clipped| walk(&clipped.shape, needle, color))
+    }
+
+    #[test]
+    fn theme_inks_clear_their_fills() {
+        let dark = ink(true);
+        let light = ink(false);
+        let panel_dark = egui::Color32::from_gray(27);
+        let panel_light = egui::Color32::from_gray(248);
+        let plot_dark = egui::Color32::from_gray(10);
+        let plot_light = egui::Color32::from_gray(255);
+        let dark_ok = dark.note == egui::Color32::from_rgb(0xff, 0xd9, 0x3d)
+            && dark.failure == egui::Color32::from_rgb(0xff, 0x8a, 0x80)
+            && dark.curve == egui::Color32::from_rgb(0x4e, 0xcd, 0xc4)
+            && dark.curve_b == egui::Color32::from_rgb(0xff, 0x6b, 0x6b)
+            && contrast(dark.note, panel_dark) >= 4.5
+            && contrast(dark.failure, panel_dark) >= 4.5
+            && contrast(dark.curve, plot_dark) >= 3.0
+            && contrast(dark.curve_b, plot_dark) >= 3.0;
+        let light_ok = contrast(light.note, panel_light) >= 4.5
+            && contrast(light.failure, panel_light) >= 4.5
+            && contrast(light.curve, plot_light) >= 3.0
+            && contrast(light.curve_b, plot_light) >= 3.0
+            && light.note != dark.note
+            && light.failure != dark.failure
+            && light.curve != dark.curve
+            && light.curve_b != dark.curve_b;
+        assert!(dark_ok);
+        assert!(light_ok);
+    }
+
+    #[test]
+    fn the_window_paints_each_themes_inks() {
+        let (mut app, mut ui) = open_long("inks");
+        let output = ui.show(&mut app, Vec::new());
+        let alpha = node_rects(&output, "Alpha", false);
+        let compares = node_rects(&output, "Compare", true);
+        let paired = alpha.first().and_then(|label| {
+            compares
+                .iter()
+                .find(|compare| (compare.center().y - label.center().y).abs() < 8.0)
+                .map(|compare| compare.center())
+        });
+        output.drop_without_applying_deltas();
+        assert!(paired.is_some());
+        click_pos(&mut ui, &mut app, paired.unwrap_or(egui::Pos2::ZERO));
+        assert!(app.compare.is_some());
+        app.note = "palette note".to_string();
+        for dark in [true, false] {
+            app.prefs
+                .set_theme(if dark { Theme::Dark } else { Theme::Light });
+            let colors = ink(dark);
+            let output = ui.show(&mut app, Vec::new());
+            let painted = text_uses(&output, "palette note", colors.note)
+                && text_uses(&output, "boom", colors.failure)
+                && shape_uses(&output, colors.curve)
+                && shape_uses(&output, colors.curve_b);
+            output.drop_without_applying_deltas();
+            assert!(painted);
+        }
+    }
+
+    #[test]
+    fn a_long_run_keeps_compare_inside_the_list() {
+        let (mut app, mut ui) = open_long("clip");
+        let output = ui.show(&mut app, Vec::new());
+        let labels = node_rects(&output, "qwen2.5-7b-instruct", false);
+        let compares = node_rects(&output, "Compare", true);
+        let row_ok = labels.iter().any(|label| {
+            label.right() <= 460.0
+                && compares.iter().any(|compare| {
+                    (compare.center().y - label.center().y).abs() < 8.0
+                        && label.right() <= compare.left() + 4.0
+                        && compare.left() > label.left()
+                        && compare.right() <= 460.0
+                        && compare.width() >= 40.0
+                })
+        });
+        let all_inside = !compares.is_empty()
+            && compares.iter().all(|compare| {
+                compare.left() >= 0.0 && compare.right() <= 460.0 && compare.width() >= 40.0
+            });
+        output.drop_without_applying_deltas();
+        assert!(row_ok);
+        assert!(all_inside);
     }
 }
