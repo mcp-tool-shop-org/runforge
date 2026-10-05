@@ -16,7 +16,7 @@ ScalarScope already draws `loss_history` from the same file and keeps that curve
 
 ## Store identity
 
-Copied from Partner Center for product `9PHL1HX0CGMF`. The pack fails if any of these three change.
+Copied from Partner Center for product `9PHL1HX0CGMF`. The pack fails if the package name, the publisher, or the publisher display name changes.
 
 | Field | Value |
 |---|---|
@@ -26,6 +26,8 @@ Copied from Partner Center for product `9PHL1HX0CGMF`. The pack fails if any of 
 | Package family name | `mcp-tool-shop.RunForge-Desktop_yn6b8xqrexa5j` |
 | Architecture | x64 |
 | First rebuild version | `2.0.0.0` (display `2.0.0`) |
+
+The package family name follows those three. Architecture and the version are not part of that set. The first rebuild is `2.0.0.0` (display `2.0.0`).
 
 Partner Center already holds `RunForgeDesktop_1.0.0.0_x64.msixupload` and `RunForgeDesktop_1.0.1.0_x64_bundle.msixupload`. The next upload is strictly above `1.0.1.0`. The fourth version part stays `0`, which is the rule recorded in backpropagate's Store handoff on 2026-10-01 and the shape of both uploads already on this product.
 
@@ -103,7 +105,7 @@ One window.
 
 - No folder yet: one sentence that says to open the folder where backpropagate wrote `run_history.json`.
 - List: status, model, final loss, started time. Newest first.
-- Chart: the selected run's `loss_history` against stored-sample index. The caption says the file holds the trainer's stored samples, at most 100.
+- Chart: the selected run's `loss_history` against stored-sample index. The caption says the chart is the stored samples, in file order. The trainer usually keeps at most 100. A longer series is still drawn as stored.
 - A run with an empty `loss_history` stays in the list. The chart says there is no stored loss.
 - Compare: two rows, both series on one chart, by sample index. Hyperparameters that differ. Eval summaries when present.
 - The skipped-entry count, when it is not zero.

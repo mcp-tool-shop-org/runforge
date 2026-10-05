@@ -37,8 +37,14 @@ pub(crate) struct LaunchRequest {
     pub cwd: PathBuf,
 }
 
+/// One published log piece. A revision replaces the open line. A commit closes it.
+pub(crate) enum LogUpdate {
+    Commit(String),
+    Revise(String),
+}
+
 pub(crate) trait Session {
-    fn take_lines(&mut self) -> Vec<String>;
+    fn take_lines(&mut self) -> Vec<LogUpdate>;
     fn finished(&mut self) -> Option<i32>;
     fn stop(&mut self);
 }
@@ -204,6 +210,32 @@ pub(crate) fn remember_line(log: &mut VecDeque<String>, line: String) {
     log.push_back(line);
 }
 
+/// Fold one reader event into the visible log.
+///
+/// A carriage-return progress line is open until a newline commits it. An empty
+/// revision is ignored so a bare `\r` cannot erase the previous line.
+pub(crate) fn apply_log_update(log: &mut VecDeque<String>, open: &mut bool, update: LogUpdate) {
+    match update {
+        LogUpdate::Revise(text) => {
+            if text.is_empty() {
+                return;
+            }
+            if *open {
+                log.pop_back();
+            }
+            remember_line(log, text);
+            *open = true;
+        }
+        LogUpdate::Commit(text) => {
+            if *open {
+                log.pop_back();
+                *open = false;
+            }
+            remember_line(log, text);
+        }
+    }
+}
+
 pub(crate) fn start_installed(request: LaunchRequest) -> Result<Box<dyn Session>, &'static str> {
     Ok(Box::new(spawn_session(request)?))
 }
@@ -244,29 +276,136 @@ pub(crate) fn spawn_session(request: LaunchRequest) -> Result<LiveSession, &'sta
     })
 }
 
-/// One log line, or `None` at EOF or on an IO error. A non-UTF-8 byte stays in the line.
-fn next_log_line(reader: &mut impl BufRead) -> Option<String> {
-    let mut chunk = Vec::new();
-    match reader.read_until(b'\n', &mut chunk) {
-        Ok(0) | Err(_) => None,
-        Ok(_) => Some(lossy_log_line(&chunk)),
-    }
+const PARTIAL_CAP: usize = 4096;
+
+/// Read state for one pipe.
+///
+/// Backprop's progress bar is a flushed `\r` prefix, not a newline. The current
+/// bar is published as soon as the buffered bytes run out, and the pending bytes
+/// stay so the next chunk extends that same line. A `\r` at the end of a buffer
+/// is consumed (`held_cr`) so the next read can tell CRLF from a new revision
+/// without spinning on the same byte. A 4096-byte piece is committed so a later
+/// revision cannot delete it.
+struct LogPump {
+    pending: Vec<u8>,
+    progress: bool,
+    held_cr: bool,
 }
 
-fn lossy_log_line(bytes: &[u8]) -> String {
-    let mut end = bytes.len();
-    if bytes.last() == Some(&b'\n') {
-        end -= 1;
+impl LogPump {
+    fn new() -> Self {
+        Self {
+            pending: Vec::new(),
+            progress: false,
+            held_cr: false,
+        }
     }
-    if end > 0 && bytes[end - 1] == b'\r' {
-        end -= 1;
+
+    /// One update, or `None` at EOF or on an IO error. A non-UTF-8 byte stays in the line.
+    /// An IO error drops the unfinished piece, matching the old reader.
+    fn next(&mut self, reader: &mut impl BufRead) -> Option<LogUpdate> {
+        loop {
+            let (consumed, update, available) = match reader.fill_buf() {
+                Err(_) => return None,
+                Ok([]) => return self.finish(),
+                Ok(buf) => {
+                    let available = buf.len();
+                    let (consumed, update) = self.step(buf);
+                    (consumed, update, available)
+                }
+            };
+            reader.consume(consumed);
+            if let Some(update) = update {
+                return Some(update);
+            }
+            if consumed == 0 {
+                return None;
+            }
+            if self.progress && !self.pending.is_empty() && consumed == available {
+                let text = String::from_utf8_lossy(&self.pending).into_owned();
+                return Some(LogUpdate::Revise(text));
+            }
+        }
     }
-    String::from_utf8_lossy(&bytes[..end]).into_owned()
+
+    fn finish(&mut self) -> Option<LogUpdate> {
+        self.held_cr = false;
+        if self.pending.is_empty() {
+            self.progress = false;
+            None
+        } else {
+            Some(self.take_commit())
+        }
+    }
+
+    fn take_commit(&mut self) -> LogUpdate {
+        let text = String::from_utf8_lossy(&self.pending).into_owned();
+        self.pending.clear();
+        self.progress = false;
+        LogUpdate::Commit(text)
+    }
+
+    /// Publish the text before a bare carriage return, then start a revision.
+    fn break_for_progress(&mut self) -> Option<LogUpdate> {
+        let update = if self.pending.is_empty() {
+            None
+        } else {
+            let text = String::from_utf8_lossy(&self.pending).into_owned();
+            self.pending.clear();
+            Some(if self.progress {
+                LogUpdate::Revise(text)
+            } else {
+                LogUpdate::Commit(text)
+            })
+        };
+        self.progress = true;
+        update
+    }
+
+    fn step(&mut self, buf: &[u8]) -> (usize, Option<LogUpdate>) {
+        let mut index = 0;
+        if self.held_cr {
+            self.held_cr = false;
+            if buf[0] == b'\n' {
+                return (1, Some(self.take_commit()));
+            }
+            if let Some(update) = self.break_for_progress() {
+                return (0, Some(update));
+            }
+        }
+        while index < buf.len() {
+            let byte = buf[index];
+            if byte == b'\r' {
+                let followed = index + 1 < buf.len();
+                if followed && buf[index + 1] == b'\n' {
+                    return (index + 2, Some(self.take_commit()));
+                }
+                if followed {
+                    index += 1;
+                    if let Some(update) = self.break_for_progress() {
+                        return (index, Some(update));
+                    }
+                    continue;
+                }
+                self.held_cr = true;
+                return (index + 1, None);
+            }
+            if byte == b'\n' {
+                return (index + 1, Some(self.take_commit()));
+            }
+            self.pending.push(byte);
+            index += 1;
+            if self.pending.len() == PARTIAL_CAP {
+                return (index, Some(self.take_commit()));
+            }
+        }
+        (buf.len(), None)
+    }
 }
 
 fn spawn_reader<R>(
     reader: R,
-    lines: &Arc<Mutex<VecDeque<String>>>,
+    lines: &Arc<Mutex<VecDeque<LogUpdate>>>,
     readers_left: &Arc<AtomicUsize>,
 ) -> thread::JoinHandle<()>
 where
@@ -277,21 +416,34 @@ where
     let readers_left = Arc::clone(readers_left);
     thread::spawn(move || {
         let mut buffered = BufReader::new(reader);
-        while let Some(line) = next_log_line(&mut buffered) {
-            push_shared(&lines, line);
+        let mut pump = LogPump::new();
+        while let Some(update) = pump.next(&mut buffered) {
+            push_shared(&lines, update);
         }
         readers_left.fetch_sub(1, Ordering::Relaxed);
     })
 }
 
-fn push_shared(lines: &Mutex<VecDeque<String>>, line: String) {
+fn push_shared(lines: &Mutex<VecDeque<LogUpdate>>, update: LogUpdate) {
+    if let LogUpdate::Revise(text) = &update
+        && text.is_empty()
+    {
+        return;
+    }
     let mut guard = lines.lock().unwrap_or_else(|poison| poison.into_inner());
-    remember_line(&mut guard, line);
+    if matches!(update, LogUpdate::Revise(_)) && matches!(guard.back(), Some(LogUpdate::Revise(_)))
+    {
+        guard.pop_back();
+    }
+    if guard.len() == LOG_CAP {
+        guard.pop_front();
+    }
+    guard.push_back(update);
 }
 
 pub(crate) struct LiveSession {
     child: Option<Child>,
-    lines: Arc<Mutex<VecDeque<String>>>,
+    lines: Arc<Mutex<VecDeque<LogUpdate>>>,
     readers: Vec<thread::JoinHandle<()>>,
     readers_left: Arc<AtomicUsize>,
     exit_code: Option<i32>,
@@ -300,7 +452,7 @@ pub(crate) struct LiveSession {
 }
 
 impl Session for LiveSession {
-    fn take_lines(&mut self) -> Vec<String> {
+    fn take_lines(&mut self) -> Vec<LogUpdate> {
         let mut guard = self
             .lines
             .lock()
@@ -481,10 +633,10 @@ unsafe extern "system" {
 #[cfg(test)]
 mod tests {
     use super::{
-        BAD_ARGUMENT, BAD_STEPS, LOG_CAP, LaunchRequest, NEED_DATA, NO_CHECKPOINT, OPEN_FOLDER,
-        SELECT_RUN, START_FAILED, Session, bust_tool_cache, eval_args, exit_note, export_args,
-        find_backprop, installed_backprop, next_log_line, push_shared, remember_line,
-        spawn_session, start_installed, train_args,
+        BAD_ARGUMENT, BAD_STEPS, LOG_CAP, LaunchRequest, LogPump, LogUpdate, NEED_DATA,
+        NO_CHECKPOINT, OPEN_FOLDER, PARTIAL_CAP, SELECT_RUN, START_FAILED, Session,
+        apply_log_update, bust_tool_cache, eval_args, exit_note, export_args, find_backprop,
+        installed_backprop, push_shared, remember_line, spawn_session, start_installed, train_args,
     };
     use std::collections::VecDeque;
     use std::path::{Path, PathBuf};
@@ -649,9 +801,10 @@ mod tests {
             let _guard = clone.lock().unwrap_or_else(|poison| poison.into_inner());
             panic!("poison");
         }));
-        push_shared(&lines, "kept".to_string());
+        push_shared(&lines, LogUpdate::Commit("kept".to_string()));
         let guard = lines.lock().unwrap_or_else(|poison| poison.into_inner());
-        assert_eq!(guard.back().map(String::as_str), Some("kept"));
+        let kept = matches!(guard.back(), Some(LogUpdate::Commit(text)) if text == "kept");
+        assert!(kept);
     }
 
     #[test]
@@ -718,16 +871,169 @@ mod tests {
         assert_eq!(file_name(found.as_deref()), Some("backprop.exe"));
     }
 
+    fn lines_from(bytes: &[u8]) -> Vec<String> {
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut pump = LogPump::new();
+        let mut log = VecDeque::new();
+        let mut open = false;
+        while let Some(update) = pump.next(&mut cursor) {
+            apply_log_update(&mut log, &mut open, update);
+        }
+        log.into_iter().collect()
+    }
+
+    struct PieceReader {
+        parts: Vec<&'static [u8]>,
+        index: usize,
+        off: usize,
+    }
+
+    impl std::io::Read for PieceReader {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if self.index >= self.parts.len() {
+                return Ok(0);
+            }
+            let part = self.parts[self.index];
+            let rest = part.len().saturating_sub(self.off);
+            if rest == 0 {
+                self.index += 1;
+                self.off = 0;
+                return self.read(out);
+            }
+            let count = rest.min(out.len());
+            out[..count].copy_from_slice(&part[self.off..self.off + count]);
+            self.off += count;
+            if self.off == part.len() {
+                self.index += 1;
+                self.off = 0;
+            }
+            Ok(count)
+        }
+    }
+
+    fn lines_from_pieces(parts: Vec<&'static [u8]>) -> (Vec<String>, Vec<LogUpdate>) {
+        let mut reader = std::io::BufReader::new(PieceReader {
+            parts,
+            index: 0,
+            off: 0,
+        });
+        let mut pump = LogPump::new();
+        let mut log = VecDeque::new();
+        let mut open = false;
+        let mut seen = Vec::new();
+        while let Some(update) = pump.next(&mut reader) {
+            seen.push(match &update {
+                LogUpdate::Commit(text) => LogUpdate::Commit(text.clone()),
+                LogUpdate::Revise(text) => LogUpdate::Revise(text.clone()),
+            });
+            apply_log_update(&mut log, &mut open, update);
+        }
+        (log.into_iter().collect(), seen)
+    }
+
     #[test]
     fn a_bad_byte_does_not_drop_the_rest_of_the_log() {
-        let bytes = b"ok\n\xff\nnext\n";
-        let mut cursor = std::io::Cursor::new(&bytes[..]);
-        let mut lines = Vec::new();
-        while let Some(line) = next_log_line(&mut cursor) {
-            lines.push(line);
-        }
+        let lines = lines_from(b"ok\n\xff\nnext\n");
         let later = lines.iter().skip(1).any(|line| line == "next");
         assert!(later);
+    }
+
+    #[test]
+    fn a_carriage_return_bar_replaces_itself_and_shows_before_newline() {
+        let lines = lines_from(b"banner\n\rbar-one\rbar-two\n");
+        let finished = lines.len() == 2 && lines[0] == "banner" && lines[1] == "bar-two";
+        assert!(finished);
+        let mut cursor = std::io::Cursor::new(&b"banner\n\rbar-one"[..]);
+        let mut pump = LogPump::new();
+        let mut saw_bar = false;
+        while let Some(update) = pump.next(&mut cursor) {
+            if let LogUpdate::Revise(text) = &update
+                && text == "bar-one"
+            {
+                saw_bar = true;
+                break;
+            }
+        }
+        assert!(saw_bar);
+    }
+
+    #[test]
+    fn a_split_crlf_is_one_line_and_a_later_chunk_extends_the_bar() {
+        let (crlf, _) = lines_from_pieces(vec![b"hello\r", b"\nnext\n"]);
+        let together = lines_from(b"hello\r\nnext\n");
+        let one_line =
+            crlf == together && crlf.len() == 2 && crlf[0] == "hello" && crlf[1] == "next";
+        assert!(one_line);
+        let no_blank = crlf
+            .iter()
+            .all(|line| !line.is_empty() && !line.contains('\r'));
+        assert!(no_blank);
+
+        let (extended, seen) = lines_from_pieces(vec![b"\rbar", b"-two"]);
+        let grew = extended.len() == 1 && extended[0] == "bar-two";
+        assert!(grew);
+        let showed_early = seen
+            .iter()
+            .any(|update| matches!(update, LogUpdate::Revise(text) if text == "bar"));
+        assert!(showed_early);
+        let not_only_the_suffix = extended.iter().all(|line| line != "-two");
+        assert!(not_only_the_suffix);
+    }
+
+    #[test]
+    fn a_long_piece_without_a_newline_is_capped_and_a_lone_cr_is_nothing() {
+        let mut bytes = vec![b'a'; PARTIAL_CAP + 10];
+        let lines = lines_from(&bytes);
+        let capped = lines.len() == 2 && lines[0].len() == PARTIAL_CAP && lines[1].len() == 10;
+        assert!(capped);
+        let letters = lines
+            .iter()
+            .all(|line| line.bytes().all(|byte| byte == b'a'));
+        assert!(letters);
+        bytes.clear();
+        let lone = lines_from(b"\r");
+        assert!(lone.is_empty());
+    }
+
+    #[test]
+    fn an_io_error_drops_the_unfinished_piece() {
+        struct ThenBoom {
+            sent: bool,
+        }
+        impl std::io::Read for ThenBoom {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                if !self.sent {
+                    self.sent = true;
+                    let first = b"ok\npartial";
+                    let count = first.len().min(out.len());
+                    out[..count].copy_from_slice(&first[..count]);
+                    return Ok(count);
+                }
+                Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "boom"))
+            }
+        }
+        let mut reader = std::io::BufReader::new(ThenBoom { sent: false });
+        let mut pump = LogPump::new();
+        let mut log = VecDeque::new();
+        let mut open = false;
+        while let Some(update) = pump.next(&mut reader) {
+            apply_log_update(&mut log, &mut open, update);
+        }
+        let kept = log.len() == 1 && log.front().map(String::as_str) == Some("ok");
+        assert!(kept);
+    }
+
+    #[test]
+    fn repeated_revisions_collapse_in_the_queue() {
+        let lines = Mutex::new(VecDeque::new());
+        push_shared(&lines, LogUpdate::Commit("banner".to_string()));
+        push_shared(&lines, LogUpdate::Revise("one".to_string()));
+        push_shared(&lines, LogUpdate::Revise("two".to_string()));
+        let guard = lines.lock().unwrap_or_else(|poison| poison.into_inner());
+        let collapsed = guard.len() == 2
+            && matches!(guard.front(), Some(LogUpdate::Commit(text)) if text == "banner")
+            && matches!(guard.back(), Some(LogUpdate::Revise(text)) if text == "two");
+        assert!(collapsed);
     }
 
     #[test]

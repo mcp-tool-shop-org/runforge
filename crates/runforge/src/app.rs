@@ -16,8 +16,8 @@ use runforge_core::{
 
 use crate::launch::{
     ALREADY_RUNNING, LaunchRequest, MISSING_TOOL, NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING,
-    OPEN_FOLDER, SELECT_RUN, Session, bust_tool_cache, eval_args, exit_note, export_args,
-    installed_backprop, remember_line, start_installed, train_args,
+    OPEN_FOLDER, SELECT_RUN, Session, apply_log_update, bust_tool_cache, eval_args, exit_note,
+    export_args, installed_backprop, start_installed, train_args,
 };
 
 const CURVE: Color32 = Color32::from_rgb(0x4e, 0xcd, 0xc4);
@@ -51,6 +51,8 @@ pub struct RunForgeApp {
     data_file: Option<PathBuf>,
     steps: String,
     log: VecDeque<String>,
+    /// True while the last log line is a carriage-return progress revision.
+    log_open: bool,
     session: Option<Box<dyn Session>>,
 }
 
@@ -74,6 +76,7 @@ impl RunForgeApp {
             data_file: None,
             steps: String::new(),
             log: VecDeque::new(),
+            log_open: false,
             session: None,
         };
         if let Some(folder) = app.prefs.last_folder.clone() {
@@ -99,10 +102,6 @@ impl RunForgeApp {
                 }
             }
             Err(error) => {
-                self.history = None;
-                self.opened_file = None;
-                self.selected = None;
-                self.compare = None;
                 self.note = error.to_string();
             }
         }
@@ -361,8 +360,8 @@ impl RunForgeApp {
             }
             (lines, code)
         };
-        for line in lines {
-            remember_line(&mut self.log, line);
+        for update in lines {
+            apply_log_update(&mut self.log, &mut self.log_open, update);
         }
         let Some(code) = code else {
             return;
@@ -481,6 +480,7 @@ impl RunForgeApp {
             Ok(session) => {
                 self.session = Some(session);
                 self.log.clear();
+                self.log_open = false;
                 self.note.clear();
             }
             Err(text) => self.note = text.to_string(),
@@ -560,7 +560,7 @@ fn draw_chart(ui: &mut egui::Ui, primary: &RunEntry, compare: Option<&RunEntry>)
                 }
             });
     }
-    ui.label("The file holds the trainer's stored samples, at most 100.");
+    ui.label("The chart is the stored samples, in file order.");
 }
 
 fn draw_series(plot: &mut egui_plot::PlotUi<'_>, name: &str, color: Color32, loss: &[LossSample]) {
@@ -663,8 +663,8 @@ fn line(ui: &mut egui::Ui, name: &str, value: &str) {
 mod tests {
     use super::RunForgeApp;
     use crate::launch::{
-        ALREADY_RUNNING, BAD_ARGUMENT, BAD_STEPS, LaunchRequest, MISSING_TOOL, NEED_DATA,
-        NO_CHECKPOINT, NOTHING_RUNNING, OPEN_FOLDER, SELECT_RUN, START_FAILED, Session,
+        ALREADY_RUNNING, BAD_ARGUMENT, BAD_STEPS, LaunchRequest, LogUpdate, MISSING_TOOL,
+        NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING, OPEN_FOLDER, SELECT_RUN, START_FAILED, Session,
     };
     use eframe::App;
     use eframe::egui::{self, Event, Modifiers, PointerButton};
@@ -874,6 +874,8 @@ mod tests {
         );
         assert!(texts.iter().any(|text| text.contains("absent")));
         assert!(texts.iter().any(|text| text.contains("stored samples")));
+        assert!(texts.iter().any(|text| text.contains("in file order")));
+        assert!(texts.iter().all(|text| !text.contains("at most 100")));
         output.drop_without_applying_deltas();
 
         ui.click(&mut app, "Clear compare");
@@ -1096,8 +1098,11 @@ mod tests {
     }
 
     impl Session for Scripted {
-        fn take_lines(&mut self) -> Vec<String> {
+        fn take_lines(&mut self) -> Vec<LogUpdate> {
             std::mem::take(&mut self.lines)
+                .into_iter()
+                .map(LogUpdate::Commit)
+                .collect()
         }
 
         fn finished(&mut self) -> Option<i32> {
@@ -1378,6 +1383,21 @@ mod tests {
         let kept = texts.iter().any(|text| text == "Stop")
             && texts.iter().any(|text| text == "still training");
         assert!(kept);
+        assert!(app.history.is_some());
+        assert!(app.opened_file.is_some());
+        output.drop_without_applying_deltas();
+        app.session = Some(Box::new(Scripted {
+            lines: Vec::new(),
+            running: false,
+            stopped: Arc::new(AtomicBool::new(false)),
+        }));
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        let reloaded = texts.iter().any(|text| text.contains("Beta"))
+            && texts
+                .iter()
+                .all(|text| !text.contains("Open the folder where backpropagate wrote"));
+        assert!(reloaded);
         output.drop_without_applying_deltas();
     }
 }
