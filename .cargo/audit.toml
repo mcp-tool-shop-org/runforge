@@ -1,0 +1,6 @@
+# Same advisory deny.toml already ignores. ttf-parser is unmaintained,
+# pulled in by winit for Linux window decorations, with no safe upgrade.
+# RunForge does not call it.
+
+[advisories]
+ignore = ["RUSTSEC-2026-0192"]

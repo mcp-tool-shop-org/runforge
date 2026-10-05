@@ -1,6 +1,14 @@
 # Changelog
 
-## 2.0.0
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased]
+
+Public pages and the ship gate. No package has been submitted to Partner Center.
+
+## [2.0.0]
 
 The Windows bench reads a backpropagate `run_history.json`. It lists the runs, draws the stored loss, compares two rows, and exports the table. When `backprop` is already installed, Train, Eval, and Export model start that command, and Stop ends the process tree. The app does not contain the trainer.
 

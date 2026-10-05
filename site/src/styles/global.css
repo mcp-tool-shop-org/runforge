@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@mcptoolshop/site-theme/styles/theme.css";
+@source "../../node_modules/@mcptoolshop/site-theme";
+
+/* The mark is white on near-black. The bench curve is teal. Cyan, not emerald. */
+@theme {
+  --color-accent: #06b6d4;
+}
