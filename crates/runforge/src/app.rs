@@ -780,7 +780,7 @@ mod tests {
         ToolAnswer,
     };
     use eframe::App;
-    use eframe::egui::{self, Event, Modifiers, PointerButton};
+    use eframe::egui::{self, Event};
     use runforge_core::{Theme, write_prefs};
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -846,71 +846,44 @@ mod tests {
             texts
         }
 
-        fn center(output: &egui::FullOutput, needle: &str) -> egui::Pos2 {
-            let update = output
-                .platform_output
-                .accesskit_update
-                .as_ref()
-                .expect("accesskit");
-            let mut exact = Vec::new();
-            let mut loose = Vec::new();
-            for (_, node) in &update.nodes {
-                let label = node.label().unwrap_or("");
-                let value = node.value().unwrap_or("");
-                let Some(bounds) = node.bounds() else {
-                    continue;
-                };
-                let width = bounds.x1 - bounds.x0;
-                let height = bounds.y1 - bounds.y0;
-                if width <= 0.0 || height <= 0.0 || width * height > 80_000.0 {
-                    continue;
-                }
-                let pos = egui::pos2(
-                    ((bounds.x0 + bounds.x1) / 2.0) as f32,
-                    ((bounds.y0 + bounds.y1) / 2.0) as f32,
-                );
-                let hit = (bounds.y0, bounds.x0, pos);
-                if label == needle || value == needle {
-                    exact.push(hit);
-                } else if label.contains(needle) || value.contains(needle) {
-                    loose.push(hit);
-                }
+        fn clickable(output: &egui::FullOutput, needle: &str) -> egui::accesskit::NodeId {
+            let mut exact = controls(output, needle, true);
+            if exact.is_empty() {
+                exact = controls(output, needle, false);
             }
-            let mut hits = if exact.is_empty() { loose } else { exact };
-            hits.sort_by(|left, right| {
-                left.0
-                    .total_cmp(&right.0)
-                    .then_with(|| left.1.total_cmp(&right.1))
+            exact.sort_by(|left, right| {
+                left.rect
+                    .top()
+                    .total_cmp(&right.rect.top())
+                    .then_with(|| left.rect.left().total_cmp(&right.rect.left()))
             });
-            hits.first().map(|(_, _, pos)| *pos).unwrap_or_else(|| {
-                panic!("missing control");
-            })
+            exact
+                .first()
+                .map(|control| control.id)
+                .unwrap_or_else(|| panic!("missing control"))
         }
 
+        // Pointer hits are tested against the previous frame, and the run list
+        // moves while it settles. The button's own click action does not.
         fn click(&mut self, app: &mut RunForgeApp, needle: &str) {
+            self.show(app, Vec::new()).drop_without_applying_deltas();
             let output = self.show(app, Vec::new());
-            let pos = Self::center(&output, needle);
+            let id = Self::clickable(&output, needle);
             output.drop_without_applying_deltas();
-            self.show(app, vec![Event::PointerMoved(pos)])
-                .drop_without_applying_deltas();
+            self.activate(app, id);
+        }
+
+        fn activate(&mut self, app: &mut RunForgeApp, id: egui::accesskit::NodeId) {
             self.show(
                 app,
-                vec![Event::PointerButton {
-                    pos,
-                    button: PointerButton::Primary,
-                    pressed: true,
-                    modifiers: Modifiers::default(),
-                }],
-            )
-            .drop_without_applying_deltas();
-            self.show(
-                app,
-                vec![Event::PointerButton {
-                    pos,
-                    button: PointerButton::Primary,
-                    pressed: false,
-                    modifiers: Modifiers::default(),
-                }],
+                vec![Event::AccessKitActionRequest(
+                    egui::accesskit::ActionRequest {
+                        action: egui::accesskit::Action::Click,
+                        target_tree: egui::accesskit::TreeId::ROOT,
+                        target_node: id,
+                        data: None,
+                    },
+                )],
             )
             .drop_without_applying_deltas();
         }
@@ -1116,16 +1089,16 @@ mod tests {
         ui.click(&mut app, "Open folder");
         assert_eq!(app.selected, Some(0));
         let output = ui.show(&mut app, Vec::new());
-        let betas = node_rects(&output, "Beta", false);
-        let compares = node_rects(&output, "Compare", true);
-        let pos = betas.iter().find_map(|label| {
+        let betas = controls(&output, "Beta", false);
+        let compares = controls(&output, "Compare", true);
+        let id = betas.iter().find_map(|label| {
             compares
                 .iter()
-                .find(|compare| (compare.center().y - label.center().y).abs() < 8.0)
-                .map(|compare| compare.center())
+                .find(|compare| (compare.rect.center().y - label.rect.center().y).abs() < 8.0)
+                .map(|compare| compare.id)
         });
         output.drop_without_applying_deltas();
-        click_pos(&mut ui, &mut app, pos.expect("Beta's Compare button"));
+        ui.activate(&mut app, id.expect("Beta's Compare button"));
         assert_eq!(app.compare, Some(1));
         let output = ui.show(&mut app, Vec::new());
         let texts = Harness::texts(&output);
@@ -1617,6 +1590,49 @@ mod tests {
         (app, ui)
     }
 
+    struct Control {
+        id: egui::accesskit::NodeId,
+        rect: egui::Rect,
+    }
+
+    fn controls(output: &egui::FullOutput, needle: &str, exact: bool) -> Vec<Control> {
+        let Some(update) = &output.platform_output.accesskit_update else {
+            return Vec::new();
+        };
+        let mut found = Vec::new();
+        for (id, node) in &update.nodes {
+            if !node.supports_action(egui::accesskit::Action::Click) {
+                continue;
+            }
+            let label = node.label().unwrap_or("");
+            let value = node.value().unwrap_or("");
+            let hit = if exact {
+                label == needle || value == needle
+            } else {
+                label.contains(needle) || value.contains(needle)
+            };
+            if !hit {
+                continue;
+            }
+            let Some(bounds) = node.bounds() else {
+                continue;
+            };
+            let width = (bounds.x1 - bounds.x0) as f32;
+            let height = (bounds.y1 - bounds.y0) as f32;
+            if width <= 0.0 || height <= 0.0 || width * height > 80_000.0 {
+                continue;
+            }
+            found.push(Control {
+                id: *id,
+                rect: egui::Rect::from_min_max(
+                    egui::pos2(bounds.x0 as f32, bounds.y0 as f32),
+                    egui::pos2(bounds.x1 as f32, bounds.y1 as f32),
+                ),
+            });
+        }
+        found
+    }
+
     fn node_rects(output: &egui::FullOutput, needle: &str, exact: bool) -> Vec<egui::Rect> {
         let Some(update) = &output.platform_output.accesskit_update else {
             return Vec::new();
@@ -1647,31 +1663,6 @@ mod tests {
             ));
         }
         rects
-    }
-
-    fn click_pos(ui: &mut Harness, app: &mut RunForgeApp, pos: egui::Pos2) {
-        ui.show(app, vec![Event::PointerMoved(pos)])
-            .drop_without_applying_deltas();
-        ui.show(
-            app,
-            vec![Event::PointerButton {
-                pos,
-                button: PointerButton::Primary,
-                pressed: true,
-                modifiers: Modifiers::default(),
-            }],
-        )
-        .drop_without_applying_deltas();
-        ui.show(
-            app,
-            vec![Event::PointerButton {
-                pos,
-                button: PointerButton::Primary,
-                pressed: false,
-                modifiers: Modifiers::default(),
-            }],
-        )
-        .drop_without_applying_deltas();
     }
 
     fn solid(mode: &egui::epaint::ColorMode, color: egui::Color32) -> bool {
@@ -1770,17 +1761,16 @@ mod tests {
     fn the_window_paints_each_themes_inks() {
         let (mut app, mut ui) = open_long("inks");
         let output = ui.show(&mut app, Vec::new());
-        let alpha = node_rects(&output, "Alpha", false);
-        let compares = node_rects(&output, "Compare", true);
-        let paired = alpha.first().and_then(|label| {
+        let alpha = controls(&output, "Alpha", false);
+        let compares = controls(&output, "Compare", true);
+        let paired = alpha.iter().find_map(|label| {
             compares
                 .iter()
-                .find(|compare| (compare.center().y - label.center().y).abs() < 8.0)
-                .map(|compare| compare.center())
+                .find(|compare| (compare.rect.center().y - label.rect.center().y).abs() < 8.0)
+                .map(|compare| compare.id)
         });
         output.drop_without_applying_deltas();
-        assert!(paired.is_some());
-        click_pos(&mut ui, &mut app, paired.unwrap_or(egui::Pos2::ZERO));
+        ui.activate(&mut app, paired.expect("Alpha's Compare button"));
         assert!(app.compare.is_some());
         app.note = "palette note".to_string();
         for dark in [true, false] {
