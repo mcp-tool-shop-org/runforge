@@ -3,7 +3,10 @@
 //! `.cmd` and `.bat` are skipped: Windows would run those through `cmd.exe`. The child is not
 //! given a new environment. On Windows it is attached to a hidden pseudoconsole, so a console
 //! program line-buffers its own stdout, and Stop kills the process tree with a job object.
+//! A start that cannot take that job fails before the process runs.
 
+#[cfg(all(windows, test))]
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::io::{BufRead, BufReader, Read};
@@ -1099,6 +1102,13 @@ fn spawn_console_session(request: LaunchRequest) -> Result<LiveSession, &'static
         owned.process = info.process;
         owned.thread = info.thread;
         let job = assign_kill_on_close(owned.process);
+        // No job means Stop cannot end the tree. Refuse while the process is
+        // still suspended. Drop terminates it, and the window shows START_FAILED.
+        if job.is_none() {
+            return Err(START_FAILED);
+        }
+        #[cfg(test)]
+        RESUME_CALLS.with(|calls| calls.set(calls.get().saturating_add(1)));
         let resumed = ResumeThread(owned.thread);
         if resumed == u32::MAX {
             return Err(START_FAILED);
@@ -1158,9 +1168,19 @@ impl Drop for Job {
 }
 
 #[cfg(windows)]
+#[cfg(all(windows, test))]
+thread_local! {
+    static REFUSE_JOB: Cell<bool> = const { Cell::new(false) };
+    static RESUME_CALLS: Cell<u32> = const { Cell::new(0) };
+}
+
 fn assign_kill_on_close(process: *mut c_void) -> Option<Job> {
     // SAFETY: the job handle is checked for null, the limit struct matches the Win32 layout,
     // and the process handle comes from the child we just spawned. On failure the job is closed.
+    #[cfg(test)]
+    if REFUSE_JOB.with(Cell::get) {
+        return None;
+    }
     unsafe {
         let handle = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
         if handle.is_null() {
@@ -1743,6 +1763,28 @@ mod tests {
             cwd: std::env::temp_dir(),
         });
         assert!(matches!(result, Err(START_FAILED)));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_failed_job_does_not_resume() {
+        super::REFUSE_JOB.with(|flag| flag.set(true));
+        super::RESUME_CALLS.with(|calls| calls.set(0));
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                super::REFUSE_JOB.with(|flag| flag.set(false));
+            }
+        }
+        let _restore = Restore;
+        let result = spawn_session(LaunchRequest {
+            program: system_tool("where.exe"),
+            args: Vec::new(),
+            cwd: std::env::temp_dir(),
+        });
+        let resumed = super::RESUME_CALLS.with(|calls| calls.get());
+        let refused = matches!(result, Err(START_FAILED)) && resumed == 0;
+        assert!(refused);
     }
 
     #[cfg(windows)]
