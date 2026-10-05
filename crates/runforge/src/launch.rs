@@ -125,14 +125,17 @@ fn positive_whole(text: &str) -> bool {
         && text.bytes().any(|byte| byte != b'0')
 }
 
-/// Walk `PATH`. Keep `backprop.exe`, `backprop.com`, and an extensionless `backprop`.
-/// A `.cmd` or `.bat` is not a result.
+/// Walk `PATH`. Keep an absolute `backprop.exe`, `backprop.com`, or extensionless `backprop`.
+/// Skip an empty or relative entry. A `.cmd` or `.bat` is not a result.
 pub(crate) fn find_backprop(path_env: &str, pathext: &str) -> Option<PathBuf> {
     let names = tool_names(pathext);
     for dir in std::env::split_paths(path_env) {
+        if dir.as_os_str().is_empty() || !dir.is_absolute() {
+            continue;
+        }
         for name in &names {
             let candidate = dir.join(name);
-            if candidate.is_file() {
+            if candidate.is_absolute() && candidate.is_file() {
                 return Some(candidate);
             }
         }
@@ -152,10 +155,42 @@ fn tool_names(pathext: &str) -> Vec<String> {
     names
 }
 
+struct ToolHit {
+    at: Instant,
+    path: Option<PathBuf>,
+}
+
+fn tool_cache() -> &'static Mutex<Option<ToolHit>> {
+    static CACHE: Mutex<Option<ToolHit>> = Mutex::new(None);
+    &CACHE
+}
+
+/// Drop the cached hit or miss so the next lookup walks `PATH` again.
+pub(crate) fn bust_tool_cache() {
+    let mut guard = tool_cache()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    *guard = None;
+}
+
+/// A hit or a miss is reused for two seconds so a frame does not stat `PATH`.
 pub(crate) fn installed_backprop() -> Option<PathBuf> {
+    let mut guard = tool_cache()
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    if let Some(hit) = guard.as_ref()
+        && hit.at.elapsed() < Duration::from_secs(2)
+    {
+        return hit.path.clone();
+    }
     let path = std::env::var_os("PATH").unwrap_or_default();
     let pathext = std::env::var_os("PATHEXT").unwrap_or_default();
-    find_backprop(&path.to_string_lossy(), &pathext.to_string_lossy())
+    let found = find_backprop(&path.to_string_lossy(), &pathext.to_string_lossy());
+    *guard = Some(ToolHit {
+        at: Instant::now(),
+        path: found.clone(),
+    });
+    found
 }
 
 pub(crate) fn exit_note(code: i32) -> String {
@@ -209,6 +244,26 @@ pub(crate) fn spawn_session(request: LaunchRequest) -> Result<LiveSession, &'sta
     })
 }
 
+/// One log line, or `None` at EOF or on an IO error. A non-UTF-8 byte stays in the line.
+fn next_log_line(reader: &mut impl BufRead) -> Option<String> {
+    let mut chunk = Vec::new();
+    match reader.read_until(b'\n', &mut chunk) {
+        Ok(0) | Err(_) => None,
+        Ok(_) => Some(lossy_log_line(&chunk)),
+    }
+}
+
+fn lossy_log_line(bytes: &[u8]) -> String {
+    let mut end = bytes.len();
+    if bytes.last() == Some(&b'\n') {
+        end -= 1;
+    }
+    if end > 0 && bytes[end - 1] == b'\r' {
+        end -= 1;
+    }
+    String::from_utf8_lossy(&bytes[..end]).into_owned()
+}
+
 fn spawn_reader<R>(
     reader: R,
     lines: &Arc<Mutex<VecDeque<String>>>,
@@ -221,11 +276,8 @@ where
     let lines = Arc::clone(lines);
     let readers_left = Arc::clone(readers_left);
     thread::spawn(move || {
-        let buffered = BufReader::new(reader);
-        for line in buffered.lines() {
-            let Ok(line) = line else {
-                break;
-            };
+        let mut buffered = BufReader::new(reader);
+        while let Some(line) = next_log_line(&mut buffered) {
             push_shared(&lines, line);
         }
         readers_left.fetch_sub(1, Ordering::Relaxed);
@@ -430,8 +482,9 @@ unsafe extern "system" {
 mod tests {
     use super::{
         BAD_ARGUMENT, BAD_STEPS, LOG_CAP, LaunchRequest, NEED_DATA, NO_CHECKPOINT, OPEN_FOLDER,
-        SELECT_RUN, START_FAILED, Session, eval_args, exit_note, export_args, find_backprop,
-        installed_backprop, push_shared, remember_line, spawn_session, start_installed, train_args,
+        SELECT_RUN, START_FAILED, Session, bust_tool_cache, eval_args, exit_note, export_args,
+        find_backprop, installed_backprop, next_log_line, push_shared, remember_line,
+        spawn_session, start_installed, train_args,
     };
     use std::collections::VecDeque;
     use std::path::{Path, PathBuf};
@@ -634,6 +687,56 @@ mod tests {
         assert_eq!(file_name(later.as_deref()), Some("backprop.exe"));
         assert!(find_backprop(&path_env(&[nested.as_path()]), ".EXE").is_none());
         assert!(find_backprop("", ".EXE").is_none());
+    }
+
+    struct RemoveOnDrop<'a>(&'a Path);
+
+    impl Drop for RemoveOnDrop<'_> {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(self.0);
+        }
+    }
+
+    #[test]
+    fn blank_and_relative_entries_are_not_a_tool() {
+        assert!(find_backprop(";", ".EXE").is_none());
+
+        let relative = format!("runforge-rel-{}", std::process::id());
+        let relative_dir = PathBuf::from(&relative);
+        let _cleanup = RemoveOnDrop(&relative_dir);
+        let _ = std::fs::remove_dir_all(&relative_dir);
+        std::fs::create_dir(&relative_dir).unwrap();
+        std::fs::write(relative_dir.join("backprop.exe"), b"").unwrap();
+        assert!(find_backprop(&relative, ".EXE").is_none());
+
+        let exe_dir = scratch("abs-exe");
+        std::fs::write(exe_dir.join("backprop.exe"), b"").unwrap();
+        let listed = format!(";{relative};{}", path_env(&[exe_dir.as_path()]));
+        let found = find_backprop(&listed, ".EXE");
+        let absolute = found.as_ref().is_some_and(|path| path.is_absolute());
+        assert!(absolute);
+        assert_eq!(file_name(found.as_deref()), Some("backprop.exe"));
+    }
+
+    #[test]
+    fn a_bad_byte_does_not_drop_the_rest_of_the_log() {
+        let bytes = b"ok\n\xff\nnext\n";
+        let mut cursor = std::io::Cursor::new(&bytes[..]);
+        let mut lines = Vec::new();
+        while let Some(line) = next_log_line(&mut cursor) {
+            lines.push(line);
+        }
+        let later = lines.iter().skip(1).any(|line| line == "next");
+        assert!(later);
+    }
+
+    #[test]
+    fn the_tool_lookup_is_stable_until_the_cache_is_cleared() {
+        let first = installed_backprop();
+        let second = installed_backprop();
+        assert!(first == second);
+        bust_tool_cache();
+        let _third = installed_backprop();
     }
 
     #[test]

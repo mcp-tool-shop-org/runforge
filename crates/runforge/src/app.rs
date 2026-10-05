@@ -16,8 +16,8 @@ use runforge_core::{
 
 use crate::launch::{
     ALREADY_RUNNING, LaunchRequest, MISSING_TOOL, NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING,
-    OPEN_FOLDER, SELECT_RUN, Session, eval_args, exit_note, export_args, installed_backprop,
-    remember_line, start_installed, train_args,
+    OPEN_FOLDER, SELECT_RUN, Session, bust_tool_cache, eval_args, exit_note, export_args,
+    installed_backprop, remember_line, start_installed, train_args,
 };
 
 const CURVE: Color32 = Color32::from_rgb(0x4e, 0xcd, 0xc4);
@@ -146,13 +146,17 @@ impl eframe::App for RunForgeApp {
             ui.add_space(4.0);
             ui.label(RichText::new(&self.note).color(Color32::from_rgb(0xff, 0xd9, 0x3d)));
         }
-        if self.history.is_none() {
+        if self.history.is_none() && self.session.is_none() {
             ui.add_space(24.0);
             ui.label("Open the folder where backpropagate wrote run_history.json.");
-            return;
+        } else {
+            egui::Panel::bottom("log").show(ui, |ui| self.log_panel(ui));
+            self.bench(ui);
         }
-        egui::Panel::bottom("log").show(ui, |ui| self.log_panel(ui));
-        self.bench(ui);
+        if self.session.is_some() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(200));
+        }
     }
 }
 
@@ -193,7 +197,7 @@ impl RunForgeApp {
         if let Some(path) = &self.opened_file {
             ui.label(path.display().to_string());
         }
-        if self.history.is_some() {
+        if self.history.is_some() || self.session.is_some() {
             self.launch_form(ui);
         }
     }
@@ -386,6 +390,7 @@ impl RunForgeApp {
     }
 
     fn prepare(&mut self) -> Result<(PathBuf, PathBuf), &'static str> {
+        bust_tool_cache();
         if self.session.is_some() {
             return Err(ALREADY_RUNNING);
         }
@@ -1330,5 +1335,49 @@ mod tests {
         ui.show(&mut app, Vec::new()).drop_without_applying_deltas();
         assert!(app.note.starts_with("could not save preferences"));
         assert!(!app.note.starts_with("backprop"));
+    }
+
+    #[test]
+    fn a_running_session_requests_another_frame() {
+        let dir = scratch("repaint");
+        let mut app = RunForgeApp::open(dir);
+        app.session = Some(Box::new(Scripted {
+            lines: Vec::new(),
+            running: true,
+            stopped: Arc::new(AtomicBool::new(false)),
+        }));
+        let mut ui = Harness::new();
+        let output = ui.show(&mut app, Vec::new());
+        let soon = output
+            .viewport_output
+            .values()
+            .any(|viewport| viewport.repaint_delay <= std::time::Duration::from_millis(250));
+        assert!(soon);
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn a_failed_open_keeps_stop_and_the_log() {
+        let (folder, mut app, mut ui) = open_runs("failed-open");
+        app.session = Some(Box::new(Scripted {
+            lines: vec!["still training".to_string()],
+            running: true,
+            stopped: Arc::new(AtomicBool::new(false)),
+        }));
+        ui.show(&mut app, Vec::new()).drop_without_applying_deltas();
+        let Some(parent) = folder.parent() else {
+            panic!("folder");
+        };
+        let empty = parent.join("no-history");
+        let _ = std::fs::remove_dir_all(&empty);
+        std::fs::create_dir(&empty).unwrap();
+        app.ask_folder = Box::new(move |_| Some(empty.clone()));
+        ui.click(&mut app, "Open folder");
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        let kept = texts.iter().any(|text| text == "Stop")
+            && texts.iter().any(|text| text == "still training");
+        assert!(kept);
+        output.drop_without_applying_deltas();
     }
 }

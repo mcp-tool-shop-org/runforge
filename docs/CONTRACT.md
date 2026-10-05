@@ -61,11 +61,11 @@ The file is a JSON array. Backpropagate writes it from `RunHistoryManager` (`bac
 | `status` | `running`, `completed`, or `failed`. Anything else is shown as the raw string. |
 | `session_kind` | `single_run` or `multi_run`, or the raw string. |
 | `model_name` | List and compare. |
-| `dataset_info` | List. |
+| `dataset_info` | Shown on the selected run as Dataset. Not a run-list or list-CSV column. |
 | `started_at`, else `timestamp` | List order. Newest first by that timestamp. An unparseable timestamp sorts last. |
 | `completed_at` | Shown when present. |
 | `duration_seconds` | Shown when it is a finite number. |
-| `steps` | Shown when it is a number. |
+| `steps` | Shown as text when it is a string, number, or boolean. Empty is omitted. |
 | `final_loss` | The list column. It is not appended to the curve. |
 | `loss_history` | The curve, in stored order. |
 | `hyperparameters` | Object. Compare shows keys whose parsed values differ. |
