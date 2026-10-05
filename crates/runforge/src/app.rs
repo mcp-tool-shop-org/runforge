@@ -1114,8 +1114,19 @@ mod tests {
         app.ask_folder = Box::new(move |_| Some(chosen.clone()));
         let mut ui = Harness::new();
         ui.click(&mut app, "Open folder");
-        ui.click(&mut app, "Beta");
-        ui.click(&mut app, "Compare");
+        assert_eq!(app.selected, Some(0));
+        let output = ui.show(&mut app, Vec::new());
+        let betas = node_rects(&output, "Beta", false);
+        let compares = node_rects(&output, "Compare", true);
+        let pos = betas.iter().find_map(|label| {
+            compares
+                .iter()
+                .find(|compare| (compare.center().y - label.center().y).abs() < 8.0)
+                .map(|compare| compare.center())
+        });
+        output.drop_without_applying_deltas();
+        click_pos(&mut ui, &mut app, pos.expect("Beta's Compare button"));
+        assert_eq!(app.compare, Some(1));
         let output = ui.show(&mut app, Vec::new());
         let texts = Harness::texts(&output);
         assert!(
