@@ -1,3 +1,9 @@
+// The Store package is a window. A console subsystem opens a second window.
+#![cfg_attr(
+    all(windows, not(test), not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 use std::path::PathBuf;
 
 use anyhow::Context;
