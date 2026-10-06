@@ -155,6 +155,7 @@ pub fn load_series_folder(folder: &Path) -> Result<Board, HistoryError> {
             .then_with(|| left.name.cmp(&right.name))
             .then_with(|| left.file_name.cmp(&right.file_name))
     });
+    disambiguate(&mut series);
     let (shared, varying) = split_recipe(&series);
     Ok(Board {
         series,
@@ -165,6 +166,27 @@ pub fn load_series_folder(folder: &Path) -> Result<Board, HistoryError> {
 }
 
 struct Skip;
+
+/// Two runs with one seed keep apart: each clashing name gains its file's own tag.
+fn disambiguate(series: &mut [Series]) {
+    let names: Vec<String> = series.iter().map(|item| item.name.clone()).collect();
+    for item in series.iter_mut() {
+        if names.iter().filter(|name| **name == item.name).count() < 2 {
+            continue;
+        }
+        let stem = item
+            .file_name
+            .trim_end_matches(".json")
+            .trim_start_matches("run-config")
+            .trim_start_matches(['-', '_']);
+        let tag = if stem.is_empty() {
+            item.file_name.as_str()
+        } else {
+            stem
+        };
+        item.name = format!("{} ({tag})", item.name);
+    }
+}
 
 fn seed_order(seed: Option<i64>) -> (u8, i64) {
     match seed {
@@ -238,11 +260,13 @@ fn load_series_file(path: &Path) -> Result<Series, Skip> {
         .and_then(|name| name.to_str())
         .unwrap_or("run-config.json")
         .to_string();
-    let recipe = object
-        .get("hyperparameters")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
+    let recipe = normalize_recipe(
+        object
+            .get("hyperparameters")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default(),
+    );
     let summary = object
         .get("training_summary")
         .and_then(Value::as_object)
@@ -258,6 +282,49 @@ fn load_series_file(path: &Path) -> Result<Series, Skip> {
         recipe,
         summary,
     })
+}
+
+/// One spelling per knob. Some trainers nest LoRA settings under `lora` and use
+/// short names (`lr`, `schedule`). A canonical key already present wins, and an
+/// alias is never written over it. Unknown keys pass through unchanged.
+pub fn normalize_recipe(mut recipe: Map<String, Value>) -> Map<String, Value> {
+    if let Some(Value::Object(lora)) = recipe.get("lora").cloned() {
+        let mut flattened = true;
+        for (inner, outer) in [
+            ("r", "lora_r"),
+            ("alpha", "lora_alpha"),
+            ("dropout", "lora_dropout"),
+            ("target_modules", "target_modules"),
+        ] {
+            if let Some(value) = lora.get(inner) {
+                if recipe.contains_key(outer) {
+                    flattened = false;
+                } else {
+                    recipe.insert(outer.to_string(), value.clone());
+                }
+            }
+        }
+        if flattened
+            && lora
+                .keys()
+                .all(|key| ["r", "alpha", "dropout", "target_modules"].contains(&key.as_str()))
+        {
+            recipe.remove("lora");
+        }
+    }
+    for (alias, canonical) in [
+        ("lr", "learning_rate"),
+        ("schedule", "lr_scheduler"),
+        ("per_device_train_batch_size", "per_device_batch"),
+        ("gradient_accumulation_steps", "grad_accum"),
+    ] {
+        if !recipe.contains_key(canonical)
+            && let Some(value) = recipe.remove(alias)
+        {
+            recipe.insert(canonical.to_string(), value);
+        }
+    }
+    recipe
 }
 
 fn sample_from(value: &Value) -> Sample {
@@ -692,8 +759,31 @@ pub fn remember(directory: &Path, board: &Board, text: &str) -> Result<(), std::
         },
     );
     notes.truncate(20);
+    let mut memory = read_memory(directory);
+    memory.insert("notes".to_string(), notes_value(&notes));
+    write_memory(directory, &memory)
+}
+
+/// The memory file as one object. Each part (notes, weighings) keeps its own key.
+pub(crate) fn read_memory(directory: &Path) -> Map<String, Value> {
+    fs::read(directory.join(MEMORY_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .and_then(|value| match value {
+            Value::Object(object) => Some(object),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+/// Write the whole memory object back. A part this call did not change is kept.
+pub(crate) fn write_memory(
+    directory: &Path,
+    memory: &Map<String, Value>,
+) -> Result<(), std::io::Error> {
     fs::create_dir_all(directory)?;
-    let body = serde_json::to_string_pretty(&notes_value(&notes)).expect("notes should serialize");
+    let body = serde_json::to_string_pretty(&Value::Object(memory.clone()))
+        .expect("memory should serialize");
     fs::write(directory.join(MEMORY_FILE), body + "\n")
 }
 
@@ -751,33 +841,25 @@ struct Note {
 }
 
 fn notes_value(notes: &[Note]) -> Value {
-    Value::Object(Map::from_iter([(
-        "notes".to_string(),
-        Value::Array(
-            notes
-                .iter()
-                .map(|note| {
-                    Value::Object(Map::from_iter([
-                        (
-                            "fingerprint".to_string(),
-                            Value::String(note.fingerprint.clone()),
-                        ),
-                        ("text".to_string(), Value::String(note.text.clone())),
-                    ]))
-                })
-                .collect(),
-        ),
-    )]))
+    Value::Array(
+        notes
+            .iter()
+            .map(|note| {
+                Value::Object(Map::from_iter([
+                    (
+                        "fingerprint".to_string(),
+                        Value::String(note.fingerprint.clone()),
+                    ),
+                    ("text".to_string(), Value::String(note.text.clone())),
+                ]))
+            })
+            .collect(),
+    )
 }
 
 fn read_notes(directory: &Path) -> Vec<Note> {
-    let Ok(bytes) = fs::read(directory.join(MEMORY_FILE)) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
-        return Vec::new();
-    };
-    let Some(items) = value.get("notes").and_then(Value::as_array) else {
+    let memory = read_memory(directory);
+    let Some(items) = memory.get("notes").and_then(Value::as_array) else {
         return Vec::new();
     };
     items

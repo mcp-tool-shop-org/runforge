@@ -2,7 +2,7 @@
 title: Architecture
 description: The library parses a history or a series folder. The window draws it, writes the report, and, on request, starts backprop.
 sidebar:
-  order: 4
+  order: 5
 ---
 
 Two crates. The library never opens a window. The binary never decides that an unknown key is illegal.
@@ -19,7 +19,20 @@ A duplicate key inside a JSON object refuses the whole file. The parser that wou
 
 Unknown keys on an entry are retained. That is the opposite of a world file that must refuse an extra key. The trainer adds fields. Export of one entry writes them back out.
 
-A series folder is the other reader. It loads `run-config*.json` from the opened folder and from immediate child folders. Each sample keeps its axis, loss, learning rate, and every other logged field. The weighing and the comparison report are computed in this crate from those records. They do not call a model and they do not open the network. The report text is the string the window shows and the string Save report writes.
+A series folder is the other reader. It loads `run-config*.json` from the opened folder and from immediate child folders. A recipe that nests LoRA settings under `lora`, or uses `lr` and `schedule`, is read as the usual knobs. Each sample keeps its axis, loss, learning rate, and every other logged field.
+
+The rest of the library is the instrument and the workbench. None of it calls a model or opens the network.
+
+| Module | What it owns |
+| --- | --- |
+| `weigh` | The window around each low: median, quartiles, the spread between runs, and the reference cards. |
+| `report` | The report text: the string the window shows and the string Save report writes. |
+| `ledger` | Each measured weighing, keyed by the runs' identities, for the report's earlier weighings. |
+| `expr` | The formula language: a parser with size and depth caps, and an evaluator over one run's samples. |
+| `bench` | The statistics, learned tools, hypotheses, per-folder tests, e-values, evidence across folders, e-BH, and checkpoints. |
+| `session` | One workbench session: the tool schemas per phase, the prompts, and what each tool call does. |
+
+Each module knows only what it needs. `expr` knows nothing about tools, `bench` knows nothing about chat, and `session` knows nothing about HTTP.
 
 ## `runforge`
 
@@ -27,7 +40,15 @@ The binary is the window: `eframe` 0.36, `egui_plot` 0.37, `rfd` 0.15. `anyhow` 
 
 A history folder draws the list, the chart, compare, and export. It does not recompute the curve. The caption stays "The chart is the stored samples, in file order."
 
-A series folder draws every sample, the shared recipe, the low row, and the report. The report is generated again from the measurements. It is not a paraphrase stored beside them. Ask, when you press it, talks only to a local Ollama on `127.0.0.1` port `11434`, on a background thread. A cloud-tagged name is dropped. The question carries no digit from the measurements and no folder path. A note that fails the fence is not written into the memory file.
+A series folder draws every sample, the shared recipe, the low row, the report, and the workbench pane. The report is generated again from the measurements. It is not a paraphrase stored beside them.
+
+Ask runs a session on a background thread in `sidecar`:
+- It talks only to a local Ollama on `127.0.0.1:11434`, through `/api/chat` with tools.
+- It picks a model that `/api/show` says can call tools, and drops cloud-tagged names.
+- It sends each call to `session` and returns the program's answer to the model.
+- When the session ends, the app keeps the learned tools and hypotheses in `sidecar-memory.json`, beside the weighings and the checkpoints.
+
+Opening a folder does three things: it retests the stored hypotheses for its method, counts a new folder toward the next checkpoint, and records the weighing.
 
 The launcher is a separate path, used only by Train, Eval, and Export model. It walks `PATH` for an absolute `backprop.exe`, `backprop.com`, or extensionless `backprop`, and it skips `.cmd` and `.bat`. The walk does not block the window. A click waits for the last finished answer instead of reporting the tool missing early.
 

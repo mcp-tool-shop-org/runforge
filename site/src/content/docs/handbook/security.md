@@ -2,7 +2,7 @@
 title: Security
 description: The folder you pick, the process the window starts, and the things the package does not contain.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 RunForge reads a folder you pick. It is not the trainer, and it does not phone home.
@@ -17,10 +17,12 @@ Report a vulnerability privately through [GitHub Security Advisories](https://gi
 | A series folder | `run-config*.json` in that folder and in its immediate children. One bad file is skipped. The series files are not rewritten. |
 | Export and the data file | Paths you pick. The history file is not rewritten. |
 | Preferences | Last folder and theme. Packaged LocalState, otherwise beside the executable, otherwise the process temporary directory. |
+| The memory file | `sidecar-memory.json`, beside the preferences. Notes, weighings, learned formula tools (at most 50), hypotheses with their tests (at most 60), and checkpoints. Run names, losses, epochs, recipe values and run identities; no folder path. |
+| Learned tools | A formula in a small language, evaluated by the program. It cannot read a file, open the network, loop, or run code. |
 | Train, Eval, Export model | An already-installed `backprop`, arguments built by the app, no shell, no copy of the environment. |
 | Stop | The process tree this window started. If kill-on-close cannot be assigned, the process is not resumed. |
 | The log | The child program's output, shown in the window. It is not sent anywhere. |
-| The local model | Ask connects to `127.0.0.1` port `11434`. A cloud-tagged name is not chosen. The question does not include the folder path. A kept note stays with the preferences. |
+| The local model | Ask connects to `127.0.0.1` port `11434` and uses only a model Ollama reports can call tools; a cloud-tagged name is not chosen. It sends run names, recipe values and the program's tool results, not the folder path. The model can call only the five workbench tools, each validated by the program: at most six requests and ten calls a session. |
 | Network | The manifest does not request `internetClient`. No model download, no install of backpropagate, no telemetry, no account. The report's reference list is inside the program. |
 
 The manifest for the unsigned package asks only for `runFullTrust`, so a packaged run can read a folder you pick anywhere on the machine. It does not ask for `internetClient`.

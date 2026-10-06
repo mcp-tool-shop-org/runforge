@@ -8,47 +8,209 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-pub enum SidecarReply {
-    Answer { model: String, text: String },
+use runforge_core::Phase;
+pub use runforge_core::Workbench;
+
+/// What a workbench session came back with.
+pub enum BenchReply {
+    Done {
+        model: String,
+        bench: Box<Workbench>,
+        stopped: String,
+    },
     Absent(String),
 }
 
-pub fn start_ask(prompt: String) -> std::sync::mpsc::Receiver<SidecarReply> {
+const OLLAMA: u16 = 11434;
+
+/// Run a workbench session on a background thread against the local Ollama.
+pub fn start_bench(bench: Workbench) -> std::sync::mpsc::Receiver<BenchReply> {
+    start_bench_on(OLLAMA, bench)
+}
+
+pub(crate) fn start_bench_on(port: u16, bench: Workbench) -> std::sync::mpsc::Receiver<BenchReply> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = std::thread::Builder::new()
-        .name("runforge-sidecar".to_string())
+        .name("runforge-workbench".to_string())
         .spawn(move || {
-            let reply = match run_ask(&prompt) {
-                Ok((model, text)) => SidecarReply::Answer { model, text },
-                Err(text) => SidecarReply::Absent(text),
-            };
-            let _ = tx.send(reply);
+            let _ = tx.send(run_bench(port, bench));
         });
     rx
 }
 
-fn run_ask(prompt: &str) -> Result<(String, String), String> {
-    let tags = http(11434, "GET", "/api/tags", None, Duration::from_secs(4))?;
-    let names = local_model_names(&tags);
-    let Some(model) = choose_model(&names) else {
-        return Err("No local model is available. Cloud tags are not used.".to_string());
+/// The chat loop: offer the tools, run what the model calls, hand back the program's answers.
+fn run_bench(port: u16, mut bench: Workbench) -> BenchReply {
+    let tags = match http(port, "GET", "/api/tags", None, Duration::from_secs(4)) {
+        Ok(tags) => tags,
+        Err(text) => return BenchReply::Absent(text),
     };
-    let payload = serde_json::json!({
-        "model": model,
-        "prompt": prompt,
-        "stream": false,
-        "options": { "temperature": 0.2, "num_predict": 700 }
-    });
-    let bytes = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
-    let response = http(
-        11434,
-        "POST",
-        "/api/generate",
-        Some(&bytes),
-        Duration::from_secs(180),
-    )?;
-    let text = generate_text(&response)?;
-    Ok((model, text))
+    let Some(model) = choose_tool_model(port, &local_model_names(&tags)) else {
+        return BenchReply::Absent(
+            "No local model that can call tools is available. Cloud tags are not used.".to_string(),
+        );
+    };
+    let mut messages = vec![
+        serde_json::json!({"role": "system", "content": bench.system_prompt()}),
+        serde_json::json!({"role": "user", "content": bench.opening()}),
+    ];
+    let mut stopped = format!("It used all {} rounds.", runforge_core::MAX_ROUNDS);
+    for round in 0..runforge_core::MAX_ROUNDS {
+        let phase = Phase::of(round);
+        if round > 0 && Phase::of(round - 1) != phase {
+            messages.push(serde_json::json!({"role": "user", "content": phase.prompt()}));
+        }
+        let payload = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "tools": bench.tool_specs_for(phase),
+            "stream": false,
+            "think": false,
+            "options": { "temperature": 0.2, "num_predict": 600 }
+        });
+        let body = match serde_json::to_vec(&payload) {
+            Ok(body) => body,
+            Err(error) => return BenchReply::Absent(error.to_string()),
+        };
+        let response = match http(
+            port,
+            "POST",
+            "/api/chat",
+            Some(&body),
+            Duration::from_secs(240),
+        ) {
+            Ok(response) => response,
+            Err(text) => {
+                stopped = text;
+                break;
+            }
+        };
+        let message = match chat_message(&response) {
+            Ok(message) => message,
+            Err(text) => {
+                stopped = text;
+                break;
+            }
+        };
+        let calls = tool_calls(&message);
+        messages.push(message);
+        if calls.is_empty() {
+            stopped = "The model answered without calling a tool.".to_string();
+            break;
+        }
+        for (name, args) in calls {
+            let answer = bench.call(&name, &args);
+            messages
+                .push(serde_json::json!({"role": "tool", "tool_name": name, "content": answer}));
+            if bench.finished {
+                break;
+            }
+        }
+        if bench.finished {
+            stopped = if bench.steps.last().is_some_and(|step| step.tool == "finish") {
+                "The model finished.".to_string()
+            } else {
+                format!("It used all {} tool calls.", runforge_core::MAX_CALLS)
+            };
+            break;
+        }
+    }
+    BenchReply::Done {
+        model,
+        bench: Box::new(bench),
+        stopped,
+    }
+}
+
+/// The first local model, in preference order, that Ollama says can call tools.
+fn choose_tool_model(port: u16, names: &[String]) -> Option<String> {
+    for name in candidates(names).into_iter().take(8) {
+        let body = serde_json::to_vec(&serde_json::json!({"model": name})).ok()?;
+        let Ok(shown) = http(
+            port,
+            "POST",
+            "/api/show",
+            Some(&body),
+            Duration::from_secs(10),
+        ) else {
+            continue;
+        };
+        if can_call_tools(&shown) {
+            return Some(name);
+        }
+    }
+    None
+}
+
+/// Local, non-embedding models, the known tool callers first.
+pub(crate) fn candidates(names: &[String]) -> Vec<String> {
+    let local: Vec<&str> = names
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !is_cloud(name) && !name.to_ascii_lowercase().contains("embed"))
+        .collect();
+    const PREFER: &[&str] = &[
+        "qwen3:14b",
+        "qwen2.5:14b",
+        "qwen3:8b",
+        "qwen2.5:7b",
+        "llama3.1:8b",
+        "hermes3:8b",
+    ];
+    let mut out: Vec<String> = PREFER
+        .iter()
+        .filter(|want| local.contains(want))
+        .map(|want| (*want).to_string())
+        .collect();
+    for name in local {
+        if !out.iter().any(|known| known == name) {
+            out.push(name.to_string());
+        }
+    }
+    out
+}
+
+pub(crate) fn can_call_tools(show: &str) -> bool {
+    serde_json::from_str::<Value>(show)
+        .ok()
+        .and_then(|value| value.get("capabilities").cloned())
+        .and_then(|caps| caps.as_array().cloned())
+        .is_some_and(|caps| caps.iter().any(|cap| cap.as_str() == Some("tools")))
+}
+
+pub(crate) fn chat_message(body: &str) -> Result<Value, String> {
+    let value: Value = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    if let Some(error) = value.get("error").and_then(Value::as_str) {
+        return Err(error.to_string());
+    }
+    value
+        .get("message")
+        .cloned()
+        .ok_or_else(|| "The local model returned no message.".to_string())
+}
+
+/// The calls in an assistant message. Arguments may arrive as an object or as JSON text.
+pub(crate) fn tool_calls(message: &Value) -> Vec<(String, Value)> {
+    message
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .filter_map(|call| {
+                    let function = call.get("function")?;
+                    let name = function.get("name")?.as_str()?.to_string();
+                    let args = match function.get("arguments") {
+                        Some(Value::String(text)) => {
+                            serde_json::from_str(text).unwrap_or(Value::Null)
+                        }
+                        Some(other) => other.clone(),
+                        None => Value::Null,
+                    };
+                    Some((name, args))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn http(
@@ -192,21 +354,6 @@ pub(crate) fn local_model_names(body: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub(crate) fn choose_model(names: &[String]) -> Option<String> {
-    let local: Vec<&str> = names
-        .iter()
-        .map(String::as_str)
-        .filter(|name| !is_cloud(name) && !name.to_ascii_lowercase().contains("embed"))
-        .collect();
-    const PREFER: &[&str] = &["qwen2.5:14b", "qwen3:8b", "qwen2.5:7b", "llama3.1:8b"];
-    for want in PREFER {
-        if local.contains(want) {
-            return Some((*want).to_string());
-        }
-    }
-    local.first().map(|name| (*name).to_string())
-}
-
 fn is_cloud(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.split([':', '/']).any(|part| part == "cloud")
@@ -214,57 +361,54 @@ fn is_cloud(name: &str) -> bool {
         || lower.contains("-cloud:")
 }
 
-pub(crate) fn generate_text(body: &str) -> Result<String, String> {
-    let value: Value = serde_json::from_str(body).map_err(|error| error.to_string())?;
-    if let Some(error) = value.get("error").and_then(Value::as_str) {
-        return Err(error.to_string());
-    }
-    value
-        .get("response")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "The local model returned an empty answer.".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        choose_model, decode_chunks, exchange, generate_text, local_model_names, split_http,
+        BenchReply, can_call_tools, candidates, chat_message, decode_chunks, exchange,
+        local_model_names, split_http, start_bench_on, tool_calls,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::time::Duration;
 
     #[test]
-    fn cloud_tags_are_not_chosen() {
+    fn cloud_and_embedding_tags_are_not_candidates() {
         let names = vec![
             "nemotron-3-ultra:cloud".to_string(),
             "nomic-embed-text:latest".to_string(),
+            "muse:30b".to_string(),
             "llama3.1:8b".to_string(),
             "qwen2.5:14b".to_string(),
-            "translategemma:27b".to_string(),
         ];
-        assert_eq!(choose_model(&names).as_deref(), Some("qwen2.5:14b"));
         assert_eq!(
-            choose_model(&["foo-cloud:latest".to_string(), "hermes3:8b".to_string()]).as_deref(),
-            Some("hermes3:8b")
+            candidates(&names),
+            vec!["qwen2.5:14b", "llama3.1:8b", "muse:30b"]
         );
-        assert!(choose_model(&["nomic-embed-text:latest".to_string()]).is_none());
-        assert!(choose_model(&["glm-5.2:cloud".to_string()]).is_none());
+        assert!(candidates(&["glm-5.2:cloud".to_string()]).is_empty());
+        assert!(can_call_tools(r#"{"capabilities":["completion","tools"]}"#));
+        assert!(!can_call_tools(r#"{"capabilities":["completion"]}"#));
     }
 
     #[test]
-    fn tags_and_answers_parse() {
+    fn tags_messages_and_calls_parse() {
         let names = local_model_names(r#"{"models":[{"name":"qwen3:8b"},{"name":"x:cloud"}]}"#);
         assert_eq!(names, vec!["qwen3:8b".to_string(), "x:cloud".to_string()]);
+        let message = chat_message(
+            r#"{"message":{"role":"assistant","content":"","tool_calls":[
+                {"function":{"name":"measure","arguments":{"formula":"low"}}},
+                {"function":{"name":"finish","arguments":"{\"note\":\"done\"}"}}]}}"#,
+        )
+        .unwrap();
+        let calls = tool_calls(&message);
         assert_eq!(
-            generate_text(r#"{"response":" Hold the recipe. "}"#).unwrap(),
-            "Hold the recipe."
+            calls[0],
+            ("measure".to_string(), serde_json::json!({"formula": "low"}))
         );
-        assert!(generate_text(r#"{"error":"missing"}"#).is_err());
-        assert!(generate_text(r#"{"response":"  "}"#).is_err());
+        assert_eq!(
+            calls[1],
+            ("finish".to_string(), serde_json::json!({"note": "done"}))
+        );
+        assert!(chat_message(r#"{"error":"missing"}"#).is_err());
     }
 
     #[test]
@@ -301,5 +445,250 @@ mod tests {
         assert_eq!(status, 200);
         assert_eq!(body, br#"{"models":[]}"#);
         server.join().unwrap();
+    }
+
+    /// A fake Ollama: one scripted body per request, in order.
+    fn serve(bodies: Vec<String>) -> (u16, std::thread::JoinHandle<Vec<String>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for body in bodies {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buf = [0_u8; 65536];
+                loop {
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    request.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&request).to_string();
+                    if let Some(split) = text.find("\r\n\r\n") {
+                        let length = text
+                            .lines()
+                            .find_map(|line| line.strip_prefix("Content-Length: "))
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
+                        if request.len() >= split + 4 + length {
+                            break;
+                        }
+                    }
+                    if n == 0 {
+                        break;
+                    }
+                }
+                seen.push(String::from_utf8_lossy(&request).to_string());
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream.write_all(header.as_bytes()).unwrap();
+                stream.write_all(body.as_bytes()).unwrap();
+            }
+            seen
+        });
+        (port, handle)
+    }
+
+    fn board() -> runforge_core::Board {
+        use serde_json::{Map, Value};
+        let mut recipe = Map::new();
+        recipe.insert("method".into(), Value::from("bf16 LoRA"));
+        let series = (1..=2)
+            .map(|seed| runforge_core::Series {
+                name: format!("seed {seed}"),
+                seed: Some(seed),
+                model: String::new(),
+                file_name: String::new(),
+                samples: [(0.0, 3.0), (1.0, 0.5 * seed as f64)]
+                    .iter()
+                    .map(|(x, loss)| runforge_core::Sample {
+                        x: Some(*x),
+                        loss: Some(*loss),
+                        lr: Some(0.0001),
+                        extra: Map::new(),
+                    })
+                    .collect(),
+                recipe: recipe.clone(),
+                summary: Map::new(),
+            })
+            .collect();
+        runforge_core::Board {
+            series,
+            skipped: 0,
+            shared: recipe,
+            varying: Vec::new(),
+        }
+    }
+
+    fn bench() -> runforge_core::Workbench {
+        runforge_core::Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-06")
+    }
+
+    fn absent(reply: BenchReply) -> String {
+        match reply {
+            BenchReply::Absent(text) => text,
+            BenchReply::Done { stopped, .. } => panic!("expected no session, got: {stopped}"),
+        }
+    }
+
+    fn stopped(reply: BenchReply) -> (String, usize) {
+        match reply {
+            BenchReply::Done { stopped, bench, .. } => (stopped, bench.steps.len()),
+            BenchReply::Absent(text) => panic!("expected a session, got: {text}"),
+        }
+    }
+
+    #[test]
+    fn a_session_says_why_it_could_not_start_or_had_to_stop() {
+        let wait = Duration::from_secs(20);
+        // Ollama is not running: nothing listens on a port just freed.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        assert!(
+            absent(start_bench_on(port, bench()).recv_timeout(wait).unwrap())
+                .contains("not running")
+        );
+
+        // Only models that cannot call tools.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen2.5:7b"}]}"#.to_string(),
+            r#"{"capabilities":["completion"]}"#.to_string(),
+        ]);
+        let text = absent(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert!(text.contains("can call tools"), "{text}");
+        server.join().unwrap();
+
+        // The model answers in prose without calling a tool.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+            r#"{"message":{"role":"assistant","content":"I think rank matters."}}"#.to_string(),
+        ]);
+        let (why, calls) = stopped(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert_eq!(why, "The model answered without calling a tool.");
+        assert_eq!(calls, 0);
+        server.join().unwrap();
+
+        // The server reports an error mid-session.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+            r#"{"error":"model is loading"}"#.to_string(),
+        ]);
+        let (why, _) = stopped(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert_eq!(why, "model is loading");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn a_session_that_runs_out_of_calls_says_so() {
+        let mut bodies = vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+        ];
+        let many: Vec<String> = (0..runforge_core::MAX_CALLS)
+            .map(|_| r#"{"function":{"name":"measure","arguments":{"formula":"low"}}}"#.to_string())
+            .collect();
+        bodies.push(format!(
+            r#"{{"message":{{"role":"assistant","content":"","tool_calls":[{}]}}}}"#,
+            many.join(",")
+        ));
+        let (port, server) = serve(bodies);
+        let reply = start_bench_on(port, bench())
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap();
+        let (why, calls) = stopped(reply);
+        assert_eq!(
+            why,
+            format!("It used all {} tool calls.", runforge_core::MAX_CALLS)
+        );
+        assert_eq!(calls, runforge_core::MAX_CALLS);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn a_workbench_session_runs_the_calls_and_stops_at_finish() {
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"x:cloud"},{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["completion","tools"]}"#.to_string(),
+            r#"{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"measure","arguments":{"formula":"low"}}}]}}"#.to_string(),
+            r#"{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"finish","arguments":{"note":"Only the seed changed, so no knob can be weighed."}}}]}}"#.to_string(),
+        ]);
+        let bench = runforge_core::Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-06");
+        let reply = start_bench_on(port, bench)
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap();
+        let BenchReply::Done {
+            model,
+            bench,
+            stopped,
+        } = reply
+        else {
+            panic!("the session should finish");
+        };
+        assert_eq!(model, "qwen3:14b");
+        assert_eq!(stopped, "The model finished.");
+        assert_eq!(bench.steps.len(), 2);
+        assert!(bench.steps[0].result.contains("seed noise"));
+        assert_eq!(
+            bench.note.as_deref(),
+            Some("Only the seed changed, so no knob can be weighed.")
+        );
+        let seen = server.join().unwrap();
+        assert!(seen[2].contains("\"tools\""));
+        assert!(seen[3].contains("\"role\":\"tool\""));
+        assert!(
+            !seen.iter().any(|request| request.contains("x:cloud\""))
+                || seen[1].contains("qwen3:14b")
+        );
+    }
+
+    /// Live run against the local Ollama on a real folder. Opt-in, and not built in CI:
+    /// RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge --features live live_workbench -- --nocapture
+    #[cfg(feature = "live")]
+    #[test]
+    fn live_workbench() {
+        let folder = std::env::var("RUNFORGE_LIVE_FOLDER").expect("RUNFORGE_LIVE_FOLDER");
+        let board = runforge_core::load_series_folder(std::path::Path::new(&folder)).unwrap();
+        let bench = runforge_core::Workbench::new(board, Vec::new(), Vec::new(), "2026-10-06");
+        let started = std::time::Instant::now();
+        match super::start_bench(bench).recv().unwrap() {
+            BenchReply::Done {
+                model,
+                bench,
+                stopped,
+            } => {
+                println!(
+                    "model {model}, {stopped} ({:.0} s)",
+                    started.elapsed().as_secs_f64()
+                );
+                for step in &bench.steps {
+                    println!("\n> {} {}\n{}", step.tool, step.args, step.result);
+                }
+                println!(
+                    "\nlearned: {:?}",
+                    bench
+                        .learned
+                        .iter()
+                        .map(|t| (&t.name, &t.formula))
+                        .collect::<Vec<_>>()
+                );
+                println!(
+                    "proposed: {:?}",
+                    bench
+                        .proposed
+                        .iter()
+                        .map(|h| (h.statement(), h.state().map(|s| s.word())))
+                        .collect::<Vec<_>>()
+                );
+                println!("note: {:?} dropped: {}", bench.note, bench.note_dropped);
+            }
+            BenchReply::Absent(text) => println!("absent: {text}"),
+        }
     }
 }

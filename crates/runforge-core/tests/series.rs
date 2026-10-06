@@ -3,9 +3,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use runforge_core::{
-    HistoryError, Sample, band_segments, comparison_report, earlier_readings, epoch_floor,
-    fingerprint, format_measure, load_series_folder, loss_segments, low_band, read_board, recall,
-    recipe_keys, remember, sidecar_prompt, spikes_above,
+    HistoryError, Sample, band_segments, comparison_report, comparison_report_with,
+    earlier_readings, epoch_floor, fingerprint, format_measure, ledger_for, load_series_folder,
+    loss_segments, low_band, normalize_recipe, read_board, recall, recipe_keys, record_weighing,
+    remember, sidecar_prompt, spikes_above, weighed_now,
 };
 
 fn scratch(name: &str) -> std::path::PathBuf {
@@ -138,9 +139,11 @@ fn the_reading_names_the_climb_and_the_two_rankings() {
     assert!(!report.contains("same run, seed 1024"));
     assert!(report.contains("lowest last sample"));
     assert!(report.contains("seed 1024"));
-    assert!(report.contains("LoRA scale (alpha/r): 2"));
+    assert!(report.contains("LoRA scale (alpha/r) is 2"));
     assert!(report.contains("twentieth"));
-    assert!(report.contains("Half an epoch"));
+    assert!(report.contains("half an epoch"));
+    assert!(report.contains("middle half from"));
+    assert!(!report.contains("placeholder"));
     assert!(report.contains("2106.09685"));
     assert!(!report.contains("1706.02677"));
     assert!(!report.contains("would disappear"));
@@ -324,4 +327,129 @@ fn measures_keep_small_rates_and_drop_trailing_zeros() {
     assert_eq!(format_measure(0.0), "0");
     assert_eq!(format_measure(12288.0), "12288");
     assert!(format_measure(1.57e-9).contains('e'));
+}
+
+#[test]
+fn the_ledger_keeps_the_numbers_beside_the_notes_and_groups_by_recipe_and_method() {
+    let root = scratch("ledger");
+    write_pair(&root);
+    let board = load_series_folder(&root).unwrap();
+    let prefs = scratch("ledger-prefs");
+    assert!(ledger_for(&prefs, &board).is_empty());
+    remember(&prefs, &board, "a note").unwrap();
+    record_weighing(&prefs, &weighed_now(&board, "2026-10-01")).unwrap();
+    // The note survived the weighing, and the weighing survives a later note.
+    assert_eq!(recall(&prefs, &board).as_deref(), Some("a note"));
+    remember(&prefs, &board, "a later note").unwrap();
+    let ledger = ledger_for(&prefs, &board);
+    let first = ledger.same_runs.as_ref().unwrap();
+    assert_eq!(first.date, "2026-10-01");
+    assert_eq!(first.runs.len(), 2);
+    assert!(
+        first
+            .runs
+            .iter()
+            .all(|run| run.q1 <= run.median && run.median <= run.q3)
+    );
+    // The same runs with the same numbers keep their first date.
+    record_weighing(&prefs, &weighed_now(&board, "2026-10-05")).unwrap();
+    assert_eq!(
+        ledger_for(&prefs, &board).same_runs.unwrap().date,
+        "2026-10-01"
+    );
+    let report = comparison_report_with(&board, Some("2026-10-05"), &ledger_for(&prefs, &board));
+    assert!(report.contains("first weighed on 2026-10-01"));
+
+    // Another set of seeds on the same recipe, and a recipe that only shares the method.
+    let again = scratch("ledger-again");
+    fs::write(again.join("run-config-seed7.json"), curve(7, 0.06, 0.03)).unwrap();
+    fs::write(again.join("run-config-seed8.json"), curve(8, 0.07, 0.035)).unwrap();
+    let other = scratch("ledger-other");
+    let rank32 =
+        |seed, last, low| curve(seed, last, low).replace("\"lora_r\": 16", "\"lora_r\": 32");
+    fs::write(other.join("run-config-seed13.json"), rank32(13, 0.08, 0.02)).unwrap();
+    let again_board = load_series_folder(&again).unwrap();
+    let other_board = load_series_folder(&other).unwrap();
+    record_weighing(&prefs, &weighed_now(&other_board, "2026-10-02")).unwrap();
+    let ledger = ledger_for(&prefs, &again_board);
+    assert!(ledger.same_runs.is_none());
+    assert_eq!(ledger.same_recipe.len(), 1);
+    assert_eq!(ledger.same_method.len(), 1);
+    assert_eq!(ledger.same_method[0].date, "2026-10-02");
+    let report = comparison_report_with(&again_board, Some("2026-10-06"), &ledger);
+    assert!(report.contains("On 2026-10-01, other runs of this same recipe: two runs"));
+    assert!(report.contains(
+        "On 2026-10-02, a different recipe with the same method (LoRA rank 32 where this has 16)"
+    ));
+    assert!(report.contains("Today's middles run from"));
+    assert!(!report.contains(&root.to_string_lossy().to_string()));
+    for dir in [root, prefs, again, other] {
+        fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[test]
+fn a_nested_lora_block_and_short_names_read_as_the_canonical_knobs() {
+    let raw: serde_json::Value = serde_json::from_str(
+        r#"{"lora": {"r": 16, "alpha": 32, "dropout": 0.1, "target_modules": ["q_proj"]},
+            "lr": 0.00015, "schedule": "cosine", "per_device_train_batch_size": 1,
+            "gradient_accumulation_steps": 8, "precision": "bf16"}"#,
+    )
+    .unwrap();
+    let recipe = normalize_recipe(raw.as_object().unwrap().clone());
+    assert_eq!(recipe["lora_r"], 16);
+    assert_eq!(recipe["lora_alpha"], 32);
+    assert_eq!(recipe["learning_rate"], 0.00015);
+    assert_eq!(recipe["lr_scheduler"], "cosine");
+    assert_eq!(recipe["grad_accum"], 8);
+    assert_eq!(recipe["precision"], "bf16");
+    assert!(!recipe.contains_key("lora") && !recipe.contains_key("lr"));
+    let kept: serde_json::Value = serde_json::from_str(
+        r#"{"learning_rate": 0.0002, "lr": 0.1, "lora_r": 8, "lora": {"r": 4}}"#,
+    )
+    .unwrap();
+    let recipe = normalize_recipe(kept.as_object().unwrap().clone());
+    assert_eq!(recipe["learning_rate"], 0.0002);
+    assert_eq!(recipe["lr"], 0.1);
+    assert_eq!(recipe["lora_r"], 8);
+    assert!(recipe.contains_key("lora"));
+}
+
+#[test]
+fn two_runs_with_one_seed_keep_apart_by_file() {
+    let root = scratch("same-seed");
+    fs::write(root.join("run-config-A3.json"), curve(13, 0.08, 0.02)).unwrap();
+    fs::write(root.join("run-config-A7.json"), curve(13, 0.07, 0.03)).unwrap();
+    fs::write(root.join("run-config-seed42.json"), curve(42, 0.06, 0.03)).unwrap();
+    let board = load_series_folder(&root).unwrap();
+    let names: Vec<&str> = board.series.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, vec!["seed 13 (A3)", "seed 13 (A7)", "seed 42"]);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn two_experiments_with_one_recipe_and_one_seed_are_not_the_same_runs() {
+    let first = scratch("exp-one");
+    let second = scratch("exp-two");
+    fs::write(first.join("run-config-seed13.json"), curve(13, 0.08, 0.02)).unwrap();
+    fs::write(
+        second.join("run-config-seed13.json"),
+        curve(13, 0.09, 0.025),
+    )
+    .unwrap();
+    let one = load_series_folder(&first).unwrap();
+    let two = load_series_folder(&second).unwrap();
+    assert_eq!(fingerprint(&one), fingerprint(&two));
+    assert_ne!(
+        runforge_core::board_key(&one),
+        runforge_core::board_key(&two)
+    );
+    let prefs = scratch("exp-prefs");
+    record_weighing(&prefs, &weighed_now(&one, "2026-10-01")).unwrap();
+    let ledger = ledger_for(&prefs, &two);
+    assert!(ledger.same_runs.is_none());
+    assert_eq!(ledger.same_recipe.len(), 1);
+    for dir in [first, second, prefs] {
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

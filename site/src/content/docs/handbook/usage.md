@@ -1,6 +1,6 @@
 ---
 title: Usage
-description: How a series folder, the report, the history bench, and the three launch buttons behave.
+description: How a series folder, the report, the workbench pane, the history bench, and the three launch buttons behave.
 sidebar:
   order: 2
 ---
@@ -19,13 +19,31 @@ The shared recipe is shown whole: the keys whose values agree across the series,
 
 ## The report
 
-The sidecar prints one plain-text report from the measurements. The pane shows that text. Save report writes the same string, through the same dialog the history bench uses for CSV and JSON. The report does not use markdown headings.
+The sidecar prints one plain-text report from the measurements. The pane shows that text, and Save report writes the same string through the same dialog the history bench uses for CSV and JSON. The report does not use markdown.
 
-The report keeps the lowest stored loss on the page even when that point does not win. It weighs the half epoch around each low, and it states the learning rate on that sample. When the deepest point and the calmest neighborhood belong to different series, the report says there is no winner. That is a result of weighing. It is not a missing page.
+It opens with **In short**: whether a run wins, and why. The parts below that support the answer, and a part with nothing to say is not printed:
 
-Shared settings are listed as untested. An assumption is labeled, and it is not a result. The report cites only the reference cards a printed sentence uses. The longer list in the column stays closed. Nothing on this page is fetched.
+- **What happened**: where the losses started and ended, and where each run's lowest point fell.
+- **The runs**: one block per run with the following.
+  - Its deepest point and the learning rate there.
+  - Its stretch: every sample within half an epoch of the low, with the middle and the middle half.
+  - Its last sample, and the `final_loss` marker.
+- **Why no run wins**, or **Why one leads**. When the deepest point and the calmest stretch belong to different runs, there is no winner. That is a result of weighing, not a missing page.
+- **What changed and what did not**: shared settings are listed as untested. An assumption is labeled, and it is not a result.
+- **Earlier weighings**: the same runs, other runs of the same recipe, and other recipes with the same method, with the settings where they differ.
+- **Hypotheses on the bench** and **Learned tools**, when the workbench has any.
+- **What to do next**, **What this report cannot tell you**, and **Where this comes from**. The last of these cites only the reference cards a printed sentence uses.
 
-Ask may add one short paragraph on how to read the page. That paragraph may not contain a digit, name a setting, or name a verdict. A fresh note that crosses the line is dropped, and the pane says the note was omitted. A stored note that crosses the line is not shown. Opening a folder does not replace a richer note. The sidecar does not press Train.
+The report says whether the runs really differ. It compares the gap between the runs' middles with the middle half inside each run. When the gap is smaller than the narrowest middle half, the difference between the runs is smaller than the noise inside one run.
+
+## The workbench
+
+**Ask** starts a session on a local model. The **Workbench** section of the pane holds:
+- the formula box
+- the last session's calls, each with the program's answer
+- the learned tools, each marked provisional or kept
+
+The model's closing note appears labeled "its words, not a measurement". A note that carried a digit or a verdict is replaced by a line saying it was omitted. The [workbench page](../workbench/) covers tools, hypotheses, evidence and checkpoints in full.
 
 ## Before a folder is open
 

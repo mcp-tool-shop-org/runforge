@@ -1,28 +1,35 @@
 ---
 title: RunForge Handbook
-description: What the Windows instrument reads, and what it refuses to contain.
+description: A Windows instrument for fine-tuning runs, a report that leads with its answer, and a workbench where a local model builds tools and tests what each knob does.
 sidebar:
   order: 0
 ---
 
-RunForge is a Windows instrument for a training record. Open one folder. A series folder draws every stored sample, the shared recipe, and a plain-text report. A [backpropagate](https://github.com/mcp-tool-shop-org/backpropagate) folder opens the history bench: the run list, the stored loss, a comparison of two rows, and export.
+RunForge is a Windows instrument for fine-tuning runs. Open a folder of runs and it does three things:
+- It draws every stored sample.
+- It writes a report that starts with the answer: does a run win, and why.
+- It gives a local model a workbench. There the model builds its own formula tools, proposes what each knob does, and gathers evidence across folders until a checkpoint can call a verdict.
 
-Backpropagate is the trainer. This app is the place you look at what a run already wrote. The two products stay separate, including on the Microsoft Store.
+A [backpropagate](https://github.com/mcp-tool-shop-org/backpropagate) folder opens a different screen, the history bench. It shows the run list, the stored loss, a comparison of two rows, and export.
+
+RunForge reads training records. It does not train, download a model, ship PyTorch, or call a cloud model.
 
 ## What you can do from here
 
 - [Build it and open a folder](./getting-started/)
-- [Read the window](./usage/)
-- [The commands and the sentences](./reference/)
-- [How the two crates split the work](./architecture/)
+- [Read the window and the report](./usage/)
+- [Work with the workbench: tools, hypotheses, evidence](./workbench/)
+- [The formula language, the states, and the limits](./reference/)
+- [How the crates split the work](./architecture/)
 - [What the app is allowed to touch](./security/)
 
-The [landing page](/runforge/) is the short version of the same product. The design of record is `docs/CONTRACT.md` in the repository.
+The [landing page](/runforge/) is the short version. The design of the workbench, its sources, and the outside review of its statistics are in `docs/sidecar-workbench.md` and `docs/evidence.consult.response.md` in the repository.
 
-## What this app is not
+## The rules it keeps
 
-It does not contain the trainer. It does not download a model. It does not ship Python, PyTorch, or bun. When Train, Eval, or Export model is pressed, the window starts `backprop` only if that program is already on `PATH`. If it is missing, the button says so. RunForge does not install it.
-
-On the history bench, the curve is the stored `loss_history`, in file order. `final_loss` is a column in the list. It is not another point on the line. A null sample is a gap, not a zero. On a series folder the same rule holds: `training_summary.final_loss` is a marker beside the curve, and the report does not rank by it.
+- **Every sample stays a record.** Every finite sample is drawn, a gap is a gap, and `final_loss` is a marker beside the curve, never a rank.
+- **The program writes every number.** The model chooses what to compute. The program computes it and writes the sentence. The model's own words are fenced and labeled.
+- **A knob that never changed was never tested.** RunForge says so, and plans the runs that would test it.
+- **A verdict is earned, not announced.** Evidence comes from new runs only. It is multiplied across folders and judged at a fixed checkpoint, at a 5% false discovery rate.
 
 The published Store listing, product `9PHL1HX0CGMF`, is still the 1.0.1 classifier app until a package above `1.0.1.0` is submitted. This handbook describes the 2.0.0 source build in this repository.

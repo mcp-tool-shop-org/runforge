@@ -10,11 +10,13 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, EvalSummary, History, HistoryError, HyperDiff, LossSample, Prefs, Reading, RunEntry,
-    Theme, VERSION, comparison_report, curve_csv, curve_segments, earlier_readings, entry_json,
-    finite_points, format_f64, hyperparameter_diffs, list_csv, load_folder, load_series_folder,
-    orientation_allowed, read_board, read_prefs, recall, remember, report_file_name,
-    sidecar_prompt, write_prefs,
+    Board, Book, EvalSummary, History, HistoryError, HyperDiff, Hypothesis, LearnedTool, Ledger,
+    LossSample, Prefs, Reading, RunEntry, Step, Theme, VERSION, Workbench, board_method,
+    comparison_report_full, curve_csv, curve_segments, earlier_readings, entry_json, evaluate,
+    finite_points, format_f64, hyperparameter_diffs, known_runs, ledger_for, list_csv, load_folder,
+    load_series_folder, note_new_folder, note_use, read_board, read_book, read_hypotheses,
+    read_prefs, read_tools, recall, record, record_weighing, remember, report_file_name, test_all,
+    weighed_now, write_book, write_hypotheses, write_prefs, write_tools,
 };
 
 use crate::instrument::{InstrumentAction, SidecarView, draw_instrument, report_date};
@@ -23,7 +25,7 @@ use crate::launch::{
     OPEN_FOLDER, SELECT_RUN, Session, ToolAnswer, apply_log_update, bust_tool_cache, eval_args,
     exit_note, export_args, start_installed, tool_answer, train_args,
 };
-use crate::sidecar::{SidecarReply, start_ask};
+use crate::sidecar::{BenchReply, start_bench};
 
 struct Ink {
     note: Color32,
@@ -81,11 +83,23 @@ pub struct RunForgeApp {
     reading: Option<Reading>,
     memory_line: String,
     earlier: Vec<String>,
+    /// Earlier weighings that bear on the open series, read before it was recorded.
+    ledger: Ledger,
     sidecar_status: String,
     sidecar_answer: String,
     /// A fresh orientation note crossed the fence. A recalled note does not set this.
     orientation_blocked: bool,
-    ask: Option<Receiver<SidecarReply>>,
+    ask: Option<Receiver<BenchReply>>,
+    /// The learned tools and the hypotheses kept beside the preferences.
+    tools: Vec<LearnedTool>,
+    hypotheses: Vec<Hypothesis>,
+    /// The checkpoints and the count of new folders since the last.
+    book: Book,
+    /// The tool calls of the last workbench session on this series.
+    trace: Vec<Step>,
+    /// The formula typed into the pane, and what it gave.
+    formula: String,
+    formula_lines: Vec<String>,
     focus: Option<String>,
     opened_file: Option<PathBuf>,
     note: String,
@@ -120,10 +134,17 @@ impl RunForgeApp {
             reading: None,
             memory_line: String::new(),
             earlier: Vec::new(),
+            ledger: Ledger::default(),
             sidecar_status: String::new(),
             sidecar_answer: String::new(),
             orientation_blocked: false,
             ask: None,
+            tools: Vec::new(),
+            hypotheses: Vec::new(),
+            book: Book::default(),
+            trace: Vec::new(),
+            formula: String::new(),
+            formula_lines: Vec::new(),
             focus: None,
             opened_file: None,
             note: String::new(),
@@ -178,10 +199,13 @@ impl RunForgeApp {
         self.reading = None;
         self.memory_line.clear();
         self.earlier.clear();
+        self.ledger = Ledger::default();
         self.sidecar_status.clear();
         self.sidecar_answer.clear();
         self.orientation_blocked = false;
         self.ask = None;
+        self.trace.clear();
+        self.formula_lines.clear();
         self.focus = None;
     }
 
@@ -199,6 +223,26 @@ impl RunForgeApp {
                     }
                 }
                 self.earlier = earlier_readings(&self.prefs_dir, &board);
+                self.ledger = ledger_for(&self.prefs_dir, &board);
+                let today = report_date().unwrap_or_default();
+                self.retest_hypotheses(&board, &today);
+                self.book = read_book(&self.prefs_dir);
+                if self.ledger.same_runs.is_none() {
+                    // A new folder counts toward the next checkpoint, whatever it shows.
+                    if let Some(checkpoint) =
+                        note_new_folder(&mut self.book, &self.hypotheses, &today)
+                    {
+                        self.note = format!("Checkpoint {} judged the bench.", checkpoint.number);
+                    }
+                    if let Err(error) = write_book(&self.prefs_dir, &self.book) {
+                        self.note = format!("could not keep the checkpoints: {error}");
+                    }
+                }
+                self.trace.clear();
+                self.formula_lines.clear();
+                if let Err(error) = record_weighing(&self.prefs_dir, &weighed_now(&board, &today)) {
+                    self.note = format!("could not keep the weighing: {error}");
+                }
                 self.history = None;
                 self.selected = None;
                 self.compare = None;
@@ -228,28 +272,59 @@ impl RunForgeApp {
         let (Some(board), Some(reading)) = (board, reading) else {
             return;
         };
+        // The whole bench: e-BH needs every hypothesis; the report prints this method's.
+        let on_bench: Vec<Hypothesis> = self.hypotheses.clone();
         let action = {
-            let view = SidecarView {
+            let mut view = SidecarView {
                 memory: &self.memory_line,
                 status: &self.sidecar_status,
                 answer: &self.sidecar_answer,
                 can_ask: self.ask.is_none(),
-                earlier: &self.earlier,
+                ledger: &self.ledger,
                 blocked: self.orientation_blocked,
+                hypotheses: &on_bench,
+                tools: &self.tools,
+                book: &self.book,
+                trace: &self.trace,
+                formula: &mut self.formula,
+                formula_lines: &self.formula_lines,
             };
-            draw_instrument(ui, &board, &reading, &view, self.focus.as_deref())
+            draw_instrument(ui, &board, &reading, &mut view, self.focus.as_deref())
         };
         match action {
             InstrumentAction::Ask => {
                 self.orientation_blocked = false;
-                self.sidecar_status = "Asking the local model.".to_string();
+                self.sidecar_status = "The workbench is running on the local model.".to_string();
                 self.sidecar_answer.clear();
-                self.ask = Some(start_ask(sidecar_prompt(&reading, &board, &self.earlier)));
+                self.trace.clear();
+                let today = report_date().unwrap_or_default();
+                self.ask = Some(start_bench(
+                    Workbench::new(
+                        board.clone(),
+                        self.tools.clone(),
+                        self.hypotheses.clone(),
+                        &today,
+                    )
+                    .knowing(known_runs(&self.prefs_dir)),
+                ));
+            }
+            InstrumentAction::TryFormula => {
+                self.formula_lines = match evaluate(&board, &self.formula, &self.tools) {
+                    Ok(column) => column.lines(),
+                    Err(reason) => vec![reason],
+                };
             }
             InstrumentAction::SaveReport => {
                 let date = report_date();
                 let name = report_file_name(&board, date.as_deref());
-                let text = comparison_report(&board, date.as_deref());
+                let text = comparison_report_full(
+                    &board,
+                    date.as_deref(),
+                    &self.ledger,
+                    &on_bench,
+                    &self.tools,
+                    &self.book,
+                );
                 self.save_text(&name, &text);
             }
             InstrumentAction::Focus(name) => {
@@ -268,30 +343,15 @@ impl RunForgeApp {
             return;
         };
         match rx.try_recv() {
-            Ok(SidecarReply::Answer { model, text }) => {
+            Ok(BenchReply::Done {
+                model,
+                bench,
+                stopped,
+            }) => {
                 self.ask = None;
-                if text.trim().is_empty() {
-                    self.sidecar_status.clear();
-                    self.sidecar_answer.clear();
-                    self.orientation_blocked = false;
-                } else if !orientation_allowed(&text) {
-                    self.sidecar_status.clear();
-                    self.sidecar_answer.clear();
-                    self.orientation_blocked = true;
-                } else {
-                    self.orientation_blocked = false;
-                    self.sidecar_status = model.clone();
-                    self.sidecar_answer = text.clone();
-                    if let (Some(board), Some(reading)) = (&self.series, &self.reading) {
-                        let note = format!("{}\n\n{model}: {text}", reading.lines().join("\n"));
-                        if remember(&self.prefs_dir, board, &note).is_ok() {
-                            self.memory_line = note;
-                            self.earlier = earlier_readings(&self.prefs_dir, board);
-                        }
-                    }
-                }
+                self.keep_session(&model, &bench, &stopped);
             }
-            Ok(SidecarReply::Absent(text)) => {
+            Ok(BenchReply::Absent(text)) => {
                 self.ask = None;
                 self.sidecar_status = text;
             }
@@ -302,6 +362,68 @@ impl RunForgeApp {
                     self.sidecar_status = "The local model did not answer.".to_string();
                 }
             }
+        }
+    }
+
+    /// Keep what a finished session learned, and show its calls.
+    fn keep_session(&mut self, model: &str, bench: &Workbench, stopped: &str) {
+        self.trace = bench.steps.clone();
+        self.sidecar_status = format!("{model}: {stopped}");
+        self.orientation_blocked = bench.note_dropped;
+        self.sidecar_answer = bench.note.clone().unwrap_or_default();
+        let Some(board) = self.series.clone() else {
+            return;
+        };
+        let mut tools = bench.learned.clone();
+        tools.extend(self.tools.iter().cloned());
+        for name in &bench.used {
+            note_use(&mut tools, name, &board);
+        }
+        let mut hypotheses = bench.proposed.clone();
+        hypotheses.extend(self.hypotheses.iter().cloned());
+        let saved = write_tools(&self.prefs_dir, &tools)
+            .and_then(|()| write_hypotheses(&self.prefs_dir, &hypotheses));
+        if let Err(error) = saved {
+            self.note = format!("could not keep the workbench: {error}");
+        }
+        self.tools = read_tools(&self.prefs_dir);
+        self.hypotheses = read_hypotheses(&self.prefs_dir);
+        if self.tools.is_empty() && !tools.is_empty() {
+            self.tools = tools;
+        }
+        if self.hypotheses.is_empty() && !hypotheses.is_empty() {
+            self.hypotheses = hypotheses;
+        }
+        if let (Some(note), Some(reading)) = (&bench.note, &self.reading) {
+            let kept = format!("{}\n\n{model}: {note}", reading.lines().join("\n"));
+            if remember(&self.prefs_dir, &board, &kept).is_ok() {
+                self.memory_line = kept;
+                self.earlier = earlier_readings(&self.prefs_dir, &board);
+            }
+        }
+    }
+
+    /// Test every stored hypothesis for this method against the runs just opened.
+    fn retest_hypotheses(&mut self, board: &Board, today: &str) {
+        self.tools = read_tools(&self.prefs_dir);
+        self.hypotheses = read_hypotheses(&self.prefs_dir);
+        let method = board_method(board);
+        let indexes: Vec<usize> = (0..self.hypotheses.len())
+            .filter(|index| self.hypotheses[*index].method == method)
+            .collect();
+        if indexes.is_empty() {
+            return;
+        }
+        let batch: Vec<Hypothesis> = indexes
+            .iter()
+            .map(|index| self.hypotheses[*index].clone())
+            .collect();
+        let results = test_all(board, &batch, &self.tools, today);
+        for (index, evaluation) in indexes.into_iter().zip(results) {
+            record(&mut self.hypotheses[index], evaluation);
+        }
+        if let Err(error) = write_hypotheses(&self.prefs_dir, &self.hypotheses) {
+            self.note = format!("could not keep the hypotheses: {error}");
         }
     }
 
@@ -1976,6 +2098,169 @@ mod tests {
     }
 
     #[test]
+    fn a_finished_session_is_kept_and_drawn_in_the_pane() {
+        let dir = scratch("bench-keep");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        for (seed, rank, low) in [(1, 16, 0.3), (2, 32, 0.1)] {
+            std::fs::write(
+                folder.join(format!("run-config-seed{seed}.json")),
+                format!(
+                    r#"{{"seed": {seed}, "hyperparameters": {{"method": "bf16 LoRA", "lora_r": {rank}}},
+                    "saturation_log": {{"loss_curve": [
+                        {{"epoch": 0.0, "loss": 4.0, "lr": 0.0001}},
+                        {{"epoch": 1.0, "loss": {low}, "lr": 0.0001}},
+                        {{"epoch": 2.0, "loss": 0.5, "lr": 0.0}}]}}}}"#
+                ),
+            )
+            .unwrap();
+        }
+        let prefs = dir.join("prefs");
+        let mut app = RunForgeApp::open(prefs.clone());
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        let board = app.series.clone().unwrap();
+
+        // A session as the model loop would hand it back.
+        let mut bench = runforge_core::Workbench::new(board, Vec::new(), Vec::new(), "2026-10-06")
+            .knowing(vec!["an earlier run".to_string()]);
+        bench.call("measure", &serde_json::json!({"formula": "low"}));
+        bench.call(
+            "learn_tool",
+            &serde_json::json!({"name": "rebound", "formula": "last / low", "meaning": "end over low"}),
+        );
+        bench.call(
+            "propose_hypothesis",
+            &serde_json::json!({"knob": "lora_r", "formula": "rebound", "knob_change": "raise", "formula_moves": "down", "why": "A wider adapter settles."}),
+        );
+        bench.call(
+            "finish",
+            &serde_json::json!({"note": "The rank pair has one run each, so it stays open."}),
+        );
+        app.keep_session("qwen3:14b", &bench, "The model finished.");
+        assert_eq!(runforge_core::read_tools(&prefs).len(), 1);
+        let stored = runforge_core::read_hypotheses(&prefs);
+        assert_eq!(stored.len(), 1);
+        assert!(
+            stored[0]
+                .registered_runs
+                .contains(&"an earlier run".to_string())
+        );
+        assert_eq!(app.sidecar_status, "qwen3:14b: The model finished.");
+
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.starts_with("Last session: 4 calls"))
+        );
+        assert!(texts.iter().any(|text| text == "Learned tools"));
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("rebound = last / low"))
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("its words, not a measurement"))
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("No checkpoint has judged it yet."))
+        );
+        output.drop_without_applying_deltas();
+
+        // A note that crossed the fence is dropped and the pane says so.
+        let mut dropped = runforge_core::Workbench::new(
+            app.series.clone().unwrap(),
+            Vec::new(),
+            Vec::new(),
+            "2026-10-06",
+        );
+        dropped.call(
+            "finish",
+            &serde_json::json!({"note": "Rank wins by 3 points."}),
+        );
+        app.keep_session("qwen3:14b", &dropped, "The model finished.");
+        assert!(app.orientation_blocked);
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("Assistant note omitted"))
+        );
+        output.drop_without_applying_deltas();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn opening_a_folder_retests_the_bench_and_the_formula_box_runs() {
+        let dir = scratch("bench-ui");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        for (seed, rank, low) in [(1, 16, 0.3), (2, 32, 0.1)] {
+            std::fs::write(
+                folder.join(format!("run-config-seed{seed}.json")),
+                format!(
+                    r#"{{"seed": {seed}, "hyperparameters": {{"method": "bf16 LoRA", "lora_r": {rank}}},
+                    "saturation_log": {{"loss_curve": [
+                        {{"epoch": 0.0, "loss": 4.0, "lr": 0.0001}},
+                        {{"epoch": 1.0, "loss": {low}, "lr": 0.0001}},
+                        {{"epoch": 2.0, "loss": 0.5, "lr": 0.0}}]}}}}"#
+                ),
+            )
+            .unwrap();
+        }
+        let prefs = dir.join("prefs");
+        let board = runforge_core::load_series_folder(&folder).unwrap();
+        let proposal = runforge_core::Proposal {
+            knob: "lora_r",
+            formula: "low",
+            direction: "lower",
+            why: "A larger adapter can fit more.",
+        };
+        let hypothesis = runforge_core::propose(&board, &[], &[], &proposal, "2026-10-01").unwrap();
+        runforge_core::write_hypotheses(&prefs, &[hypothesis]).unwrap();
+        let mut app = RunForgeApp::open(prefs.clone());
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        assert_eq!(runforge_core::read_book(&prefs).since, 1);
+        assert_eq!(app.book.since, 1);
+        let stored = runforge_core::read_hypotheses(&prefs);
+        assert_eq!(stored[0].evaluations.len(), 1);
+        assert_eq!(stored[0].state(), Some(&runforge_core::State::Inconclusive));
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(texts.iter().any(|text| text == "Workbench"));
+        assert!(texts.iter().any(|text| text == "Hypotheses on the bench"));
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("When LoRA rank goes up, low goes lower."))
+        );
+        output.drop_without_applying_deltas();
+        app.formula = "last / low".to_string();
+        ui.click(&mut app, "Run");
+        assert!(
+            app.formula_lines
+                .iter()
+                .any(|line| line.starts_with("seed 1: "))
+        );
+        app.formula = "open('x')".to_string();
+        ui.click(&mut app, "Run");
+        assert!(app.formula_lines[0].contains("not a measure"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_series_folder_draws_the_instrument() {
         let dir = scratch("series-ui");
         let folder = dir.join("runs");
@@ -2013,7 +2298,8 @@ mod tests {
                 .any(|text| text.contains("lowest sample in each epoch"))
         );
         assert!(texts.iter().all(|text| text != "Train"));
-        assert!(texts.iter().any(|text| text.contains("Half an epoch")));
+        assert!(texts.iter().any(|text| text.contains("half epoch")));
+        assert!(texts.iter().all(|text| !text.contains("Earlier weighings")));
         assert!(texts.iter().any(|text| text.contains("Reference")));
         assert!(texts.iter().any(|text| text.contains("Save report")));
         assert!(texts.iter().any(|text| text.contains("no second run")));
@@ -2034,6 +2320,9 @@ mod tests {
                 .iter()
                 .any(|text| text.contains("neighborhood refuses the crown"))
         );
+        // The model note and the weighing share one memory file; neither erased the other.
+        assert!(texts.iter().any(|text| text == "Earlier weighings"));
+        assert!(texts.iter().any(|text| text.contains("first weighed on")));
         output.drop_without_applying_deltas();
         std::fs::remove_dir_all(&dir).unwrap();
     }

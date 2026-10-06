@@ -1,17 +1,24 @@
 //! The comparison report. One string, two renderings.
 //!
 //! The window shows this text. Save writes this text. A number, a seed, a knob,
-//! or a verdict in the body is filled from the board. The model does not write it.
+//! or a verdict in the body is filled from the board and the ledger. The model
+//! does not write it.
+//!
+//! The report leads with its conclusion. Each later part supports that
+//! conclusion with the numbers it rests on, so a reader can stop after the first
+//! paragraph. A part that has nothing to say for this board is not printed.
 
 use serde_json::Value;
 
+use crate::bench::{Book, Hypothesis, LearnedTool};
+use crate::ledger::{Ledger, Weighed};
 use crate::series::{
     Board, Reading, Series, format_measure, read_board, recipe_keys, recipe_label, recipe_text,
 };
-use crate::weigh::{Neighborhood, Weighing, weigh};
+use crate::weigh::{Neighborhood, Separation, Spread, Weighing, spread, weigh};
 
 /// Printed when a fresh orientation note crosses the fence.
-pub const ORIENTATION_OMITTED: &str = "Assistant note omitted: it disagreed with the measurements. The measured lines stand on their own.";
+pub const ORIENTATION_OMITTED: &str = "Assistant note omitted: it carried a number or a verdict, which only the measurements may carry. The measured lines stand on their own.";
 
 /// `unix_secs` is whole seconds since 1970-01-01 UTC.
 ///
@@ -36,26 +43,172 @@ pub fn report_file_name(board: &Board, written_on: Option<&str>) -> String {
     }
 }
 
+/// The report for this board, with no earlier weighings.
+pub fn comparison_report(board: &Board, written_on: Option<&str>) -> String {
+    comparison_report_with(board, written_on, &Ledger::default())
+}
+
+/// The report with the workbench: hypotheses for this method and the learned tools.
+pub fn comparison_report_full(
+    board: &Board,
+    written_on: Option<&str>,
+    ledger: &Ledger,
+    hypotheses: &[Hypothesis],
+    tools: &[LearnedTool],
+    book: &Book,
+) -> String {
+    let mut out = comparison_report_with(board, written_on, ledger);
+    let bench = bench_section(board, hypotheses, tools, book);
+    if bench.is_empty() {
+        return out;
+    }
+    // The workbench goes before "What to do next", after the earlier weighings.
+    match out.find("\nWhat to do next\n") {
+        Some(at) => out.insert_str(at + 1, &bench),
+        None => out.push_str(&bench),
+    }
+    out
+}
+
+fn bench_section(
+    board: &Board,
+    hypotheses: &[Hypothesis],
+    tools: &[LearnedTool],
+    book: &Book,
+) -> String {
+    let key = crate::ledger::board_key(board);
+    let method = crate::bench::board_method(board);
+    let mut out = String::new();
+    let mine: Vec<&Hypothesis> = hypotheses.iter().filter(|h| h.method == method).collect();
+    if !mine.is_empty() {
+        line(&mut out, "Hypotheses on the bench");
+        let schedule = match book.until_next() {
+            1 => "the next one comes with the next new folder".to_string(),
+            n => format!(
+                "the next one comes after {} more new folders",
+                count_word(n as usize, false)
+            ),
+        };
+        line(
+            &mut out,
+            &format!(
+                "Each was proposed with its test fixed: a knob, a formula, and a direction. Each folder gives an e-value for each direction, multiplied across folders of new runs; a folder holding a run seen before the hypothesis was registered does not count. Verdicts are issued only at checkpoints, one every {} new folders, by e-BH at a 5% false discovery rate over both directions of every hypothesis on the bench; {schedule}.",
+                count_word(crate::bench::CHECKPOINT_EVERY as usize, false)
+            ),
+        );
+        for hypothesis in mine {
+            let so_far = crate::bench::evidence(hypothesis);
+            let verdict = match book.latest_for(&hypothesis.id) {
+                Some((checkpoint, (_, verdict, _, _))) => format!(
+                    "At checkpoint {} ({}, {} {}): {}.",
+                    checkpoint.number,
+                    checkpoint.date,
+                    count_word(checkpoint.family, false),
+                    if checkpoint.family == 1 {
+                        "hypothesis"
+                    } else {
+                        "hypotheses"
+                    },
+                    verdict.word()
+                ),
+                None => "No checkpoint has judged it yet.".to_string(),
+            };
+            line(
+                &mut out,
+                &format!(
+                    "* {} {verdict} Evidence so far: {} for, {} against, from {}. One direction alone needs {} at this bench's size.",
+                    hypothesis.statement(),
+                    format_measure(so_far.e_for),
+                    format_measure(so_far.e_against),
+                    match so_far.counted.len() {
+                        0 => "no counted folder".to_string(),
+                        1 => "one folder".to_string(),
+                        n => format!("{} folders", count_word(n, false)),
+                    },
+                    format_measure(crate::bench::threshold(hypotheses.len()))
+                ),
+            );
+            if let Some(evaluation) = hypothesis.evaluations.iter().find(|e| e.board == key) {
+                let counted = if so_far
+                    .left_out
+                    .iter()
+                    .any(|(date, _)| date == &evaluation.date)
+                    && evaluation
+                        .runs
+                        .iter()
+                        .any(|run| hypothesis.registered_runs.contains(run))
+                {
+                    " Not counted: these runs were seen before the hypothesis was registered."
+                } else {
+                    ""
+                };
+                line(
+                    &mut out,
+                    &format!(
+                        "  Here: {}. {}{counted}",
+                        evaluation.state.word(),
+                        evaluation.detail
+                    ),
+                );
+            }
+        }
+        out.push('\n');
+    }
+    if !tools.is_empty() {
+        line(&mut out, "Learned tools");
+        for tool in tools {
+            let status = if tool.kept() {
+                "kept"
+            } else {
+                "provisional until used on a second folder"
+            };
+            line(
+                &mut out,
+                &format!(
+                    "* {} = {}. {} ({status}).",
+                    tool.name, tool.formula, tool.meaning
+                ),
+            );
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The report for this board. `written_on` is the UTC day the file is written.
 ///
-/// It is not a measurement date. The samples do not carry one.
-pub fn comparison_report(board: &Board, written_on: Option<&str>) -> String {
+/// It is not a measurement date. The samples do not carry one. `ledger` is what
+/// was weighed before; read it before this board is recorded.
+pub fn comparison_report_with(board: &Board, written_on: Option<&str>, ledger: &Ledger) -> String {
     let reading = read_board(board);
     let weighing = weigh(board);
+    let spread = spread(&weighing.neighborhoods);
     let mut out = String::new();
     title(&mut out, board, written_on);
-    what_this_is(&mut out, board, &reading);
+    in_short(&mut out, board, &weighing, spread.as_ref());
     what_happened(&mut out, &reading, &weighing);
-    lowest_point(&mut out, &weighing);
-    argument(&mut out, board, &reading, &weighing);
-    not_tested(&mut out, board);
-    next_steps(&mut out, board, &weighing);
+    the_runs(&mut out, board, &reading, &weighing);
+    argument(&mut out, board, &reading, &weighing, spread.as_ref());
+    changed_and_not(&mut out, board);
+    earlier(&mut out, board, &weighing, ledger);
+    next_steps(&mut out, board, &weighing, spread.as_ref());
     cannot_tell(&mut out, board);
     sources(&mut out, board, &weighing);
     if !out.ends_with('\n') {
         out.push('\n');
     }
     out
+}
+
+/// A report line the window draws as a heading: short, not indented, no closing mark.
+pub fn is_heading(line: &str) -> bool {
+    let text = line.trim_end();
+    !text.is_empty()
+        && !text.starts_with(' ')
+        && !text.starts_with("* ")
+        && !text.starts_with(|ch: char| ch.is_ascii_digit())
+        && text.chars().count() <= 48
+        && !text.ends_with(['.', ':', ')', ',', ';'])
 }
 
 /// The omission line for a fresh note that crossed the fence, with the measured status filled in.
@@ -75,8 +228,8 @@ pub fn orientation_omission(board: &Board) -> String {
             english_list(&names)
         )
     };
-    match lowest_sentence(&weighing.neighborhoods) {
-        Some(line) => format!("{ORIENTATION_OMITTED} {line} {status}"),
+    match deepest_clause(&weighing.neighborhoods) {
+        Some(clause) => format!("{ORIENTATION_OMITTED} The deepest point is {clause}. {status}"),
         None => format!("{ORIENTATION_OMITTED} {status}"),
     }
 }
@@ -138,96 +291,232 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 }
 
 fn title(out: &mut String, board: &Board, written_on: Option<&str>) {
-    line(out, "RunForge comparison report");
+    line(out, "RunForge report");
     let n = board.series.len();
     let subtitle = if n <= 1 {
         "One run.".to_string()
     } else if seed_only(board) {
-        format!("{} runs, one recipe.", count_word(n, true))
+        format!(
+            "{} runs of one recipe. Only the seed changed.",
+            count_word(n, true)
+        )
+    } else if board.varying.is_empty() {
+        format!("{} runs of one recipe.", count_word(n, true))
     } else {
-        format!("{} runs.", count_word(n, true))
+        format!(
+            "{} runs. What changed: {}.",
+            count_word(n, true),
+            lever_name(board)
+        )
     };
     line(out, &subtitle);
     if let Some(date) = written_on.map(str::trim).filter(|date| !date.is_empty()) {
-        line(out, &format!("Report written {date} UTC."));
+        line(out, &format!("Written {date} UTC."));
     }
 }
 
-fn what_this_is(out: &mut String, board: &Board, reading: &Reading) {
-    section(out, "WHAT THIS IS");
-    let n = board.series.len();
-    if n <= 1 {
+fn in_short(out: &mut String, board: &Board, weighing: &Weighing, spread: Option<&Spread>) {
+    section(out, "In short");
+    let nears = &weighing.neighborhoods;
+    if nears.is_empty() {
         line(
             out,
-            "One training run. There is no second run, so this report does not name a winner.",
+            "No stored sample has a finite loss, so there is nothing to weigh.",
         );
-    } else if seed_only(board) {
-        let count = count_word(n, true);
-        let mut text = format!(
-            "{count} training runs with an identical recipe. The only thing that differs between them is the seed, the starting draw of randomness. {}",
-            samples_clause(board)
-        );
-        if let Some(span) = span_clause(board) {
-            text.push(' ');
-            text.push_str(&span);
-        }
-        text.push_str(" Comparing identical recipes with different seeds is a standard way to see how much of a result is the recipe and how much is luck of the draw.");
-        line(out, &text);
-    } else if rank_moves(board) || alpha_moves(board) {
-        line(out, &rank_intro(board));
-    } else {
-        let lever = lever_name(board);
+        return;
+    }
+    if nears.len() == 1 {
+        let near = &nears[0];
         line(
             out,
             &format!(
-                "{} training runs. The lever in this folder is {lever}. {}",
-                count_word(n, true),
-                samples_clause(board)
+                "There is no second run to compare it with, so this report names no winner. Its deepest point is {} at epoch {}, and the middle of the half epoch around it is {}.",
+                format_measure(near.low),
+                format_measure(near.at),
+                format_measure(near.median)
             ),
         );
+        return;
     }
-    if let Some(gaps) = gap_sentence(reading) {
-        line(out, &gaps);
+    let low_at = lowest_indexes(nears);
+    let quiet_at = quiet_indexes(nears);
+    let low = &nears[low_at[0]];
+    let quiet = &nears[quiet_at[0]];
+    let low_names = english_list(&names_at(nears, &low_at));
+    let quiet_names = english_list(&names_at(nears, &quiet_at));
+    let mut text = if weighing.abstain {
+        format!(
+            "No run wins. {} has the deepest single point, {} at epoch {}. {} has the calmest stretch around its low: a middle of {}, against {} around {}'s low.",
+            cap(&low_names),
+            format_measure(low.low),
+            format_measure(low.at),
+            cap(&quiet_names),
+            format_measure(quiet.median),
+            format_measure(low.median),
+            low_names
+        )
+    } else {
+        format!(
+            "{} leads on both counts: the deepest single point ({} at epoch {}) and the calmest stretch around its low (a middle of {}).",
+            cap(&low_names),
+            format_measure(low.low),
+            format_measure(low.at),
+            format_measure(low.median)
+        )
+    };
+    if let Some(spread) = spread {
+        text.push(' ');
+        text.push_str(&spread_sentence(spread));
+        if !weighing.abstain && spread.separation == Separation::InsideNoise {
+            text.push_str(" Read the lead as a lean, not a result.");
+        }
+    }
+    line(out, &text);
+    let closing = if seed_only(board) {
+        "Nothing in the recipe changed, so these runs say nothing about any setting.".to_string()
+    } else if (rank_moves(board) || alpha_moves(board)) && seeds_differ(board) {
+        "The runs differ in the seed as well, so no difference here belongs to one setting alone."
+            .to_string()
+    } else if !board.varying.is_empty() && seeds_differ(board) {
+        format!(
+            "The runs differ in {} and in the seed, so no difference here belongs to one setting alone.",
+            lever_name(board)
+        )
+    } else if !board.varying.is_empty() {
+        format!(
+            "Only {} changed, on one seed, so this is a measured difference, not yet a result.",
+            lever_name(board)
+        )
+    } else {
+        String::new()
+    };
+    if !closing.is_empty() {
+        line(out, &closing);
+    }
+}
+
+/// The sentence that sets the gap between run middles against the noise inside one run.
+fn spread_sentence(spread: &Spread) -> String {
+    match spread.separation {
+        Separation::InsideNoise => format!(
+            "The runs' middles sit within {} of each other, less than the middle half of any one run's stretch (the narrowest spans {}). The difference between these runs is smaller than the noise inside a single run.",
+            format_measure(spread.gap),
+            format_measure(spread.narrowest)
+        ),
+        Separation::Partial => format!(
+            "The runs' middles sit within {} of each other: wider than the calmest run's middle half ({}), narrower than the noisiest run's ({}). The runs only partly separate.",
+            format_measure(spread.gap),
+            format_measure(spread.narrowest),
+            format_measure(spread.widest)
+        ),
+        Separation::Apart => format!(
+            "The runs' middles are {} apart, wider than the middle half of any one run's stretch (the widest spans {}). The difference between these runs is larger than the noise inside a single run.",
+            format_measure(spread.gap),
+            format_measure(spread.widest)
+        ),
     }
 }
 
 fn what_happened(out: &mut String, reading: &Reading, weighing: &Weighing) {
-    section(out, "WHAT HAPPENED");
-    if let Some(text) = loss_span_sentence(reading) {
-        line(out, &text);
+    let span = loss_span_sentence(reading);
+    let climb = climb_sentence(reading, &weighing.neighborhoods);
+    let gaps = gap_sentence(reading);
+    if span.is_none() && climb.is_none() && gaps.is_none() {
+        return;
     }
-    if let Some(text) = climb_sentence(reading, &weighing.neighborhoods) {
+    section(out, "What happened");
+    for text in [span, climb, gaps].into_iter().flatten() {
         line(out, &text);
-    }
-    if weighing.neighborhoods.is_empty() {
-        line(
-            out,
-            "No stored sample has a finite loss, so this report does not describe a curve.",
-        );
     }
 }
 
-fn lowest_point(out: &mut String, weighing: &Weighing) {
-    section(out, "THE SINGLE LOWEST POINT");
-    if let Some(text) = lowest_sentence(&weighing.neighborhoods) {
-        line(out, &text);
-    } else {
-        line(
-            out,
-            "No stored sample has a finite loss, so this report does not name a low.",
+fn the_runs(out: &mut String, board: &Board, reading: &Reading, weighing: &Weighing) {
+    let nears = &weighing.neighborhoods;
+    if nears.is_empty() {
+        return;
+    }
+    section(out, "The runs");
+    let mut intro = samples_clause(board);
+    if let Some(span) = span_clause(board) {
+        intro.push(' ');
+        intro.push_str(&span);
+    }
+    intro.push_str(
+        " A run's stretch is every stored sample within half an epoch of its own deepest point.",
+    );
+    line(out, &intro);
+    for index in discussion_order(nears) {
+        let near = &nears[index];
+        line(out, "");
+        line(out, &cap(&near.name));
+        let mut deepest = format!(
+            "  Deepest point {} at epoch {}.",
+            format_measure(near.low),
+            format_measure(near.at)
         );
+        if let (Some(lr), Some(max), Some(decayed)) = (near.lr, near.lr_max, near.decayed()) {
+            let place = if decayed {
+                "under a twentieth"
+            } else {
+                "still above a twentieth"
+            };
+            deepest.push_str(&format!(
+                " Learning rate there {}, {place} of its peak of {}.",
+                format_measure(lr),
+                format_measure(max)
+            ));
+        }
+        line(out, &deepest);
+        let samples = if near.count == 1 { "sample" } else { "samples" };
+        let mut stretch = format!(
+            "  Stretch: {} {samples}, middle {}, middle half from {} to {}.",
+            near.count,
+            format_measure(near.median),
+            format_measure(near.q1),
+            format_measure(near.q3)
+        );
+        match near.next {
+            Some(next) if near.lone_low() => stretch.push_str(&format!(
+                " The deepest point is a lone sample: the next lowest is {}, more than twice as high.",
+                format_measure(next)
+            )),
+            Some(next) => stretch.push_str(&format!(" Next lowest {}.", format_measure(next))),
+            None => {}
+        }
+        line(out, &stretch);
+        if let Some(series) = reading
+            .series
+            .iter()
+            .find(|series| series.name == near.name)
+        {
+            let mut end = Vec::new();
+            if let Some(last) = &series.last {
+                end.push(format!("Last sample {}.", format_measure(last.loss)));
+            }
+            if let Some(final_loss) = series.summary_final {
+                end.push(format!(
+                    "training_summary.final_loss {}, a marker, not a point on the curve.",
+                    format_measure(final_loss)
+                ));
+            }
+            if !end.is_empty() {
+                line(out, &format!("  {}", end.join(" ")));
+            }
+        }
     }
 }
 
-fn argument(out: &mut String, board: &Board, reading: &Reading, weighing: &Weighing) {
+fn argument(
+    out: &mut String,
+    board: &Board,
+    reading: &Reading,
+    weighing: &Weighing,
+    spread: Option<&Spread>,
+) {
     let nears = &weighing.neighborhoods;
     if nears.len() >= 2 && (rank_moves(board) || alpha_moves(board)) {
-        section(out, "THE LEVER UNDER TEST");
+        section(out, "The setting under test");
         line(out, &rank_detail(board));
-        line(
-            out,
-            "[placeholder: a spread measure for the neighborhood window is not computed today]",
-        );
         if seeds_differ(board) {
             let head = if board.series.len() == 2 {
                 "The two runs differ in rank and in seed"
@@ -241,100 +530,81 @@ fn argument(out: &mut String, board: &Board, reading: &Reading, weighing: &Weigh
                 ),
             );
         } else {
+            let measured = match spread.map(|spread| spread.separation) {
+                Some(Separation::InsideNoise) => {
+                    " The gap between the two middles is smaller than the noise inside either run."
+                }
+                Some(Separation::Apart) => {
+                    " The gap between the two middles is larger than the noise inside either run, but it is one pair on one seed."
+                }
+                _ => "",
+            };
             line(
                 out,
-                "This report does not credit the rank change. Run the same rank pair again across seeds before treating rank as a lever.",
+                &format!(
+                    "This report does not credit the rank change.{measured} Run the same rank pair again across seeds before treating rank as a lever."
+                ),
             );
         }
     }
     if nears.len() < 2 {
-        emit_lines(out, nears, &discussion_order(nears));
         return;
     }
-    if weighing.abstain {
-        abstain_argument(out, board, reading, weighing);
-    } else {
-        agree_argument(out, reading, weighing);
-    }
-    measured_note(out, board, weighing);
-}
-
-fn abstain_argument(out: &mut String, board: &Board, reading: &Reading, weighing: &Weighing) {
-    let nears = &weighing.neighborhoods;
     let low_at = lowest_indexes(nears);
     let quiet_at = quiet_indexes(nears);
     let low = &nears[low_at[0]];
     let quiet = &nears[quiet_at[0]];
     let low_names = names_at(nears, &low_at);
     let quiet_names = names_at(nears, &quiet_at);
-    section(
-        out,
-        &format!("WHY {} IS NOT THE WINNER", low.name.to_uppercase()),
-    );
-    line(out, &company_prose(low, nears));
-    line(
-        out,
-        &format!(
-            "Across the {} stored samples within half an epoch of the low, the middle value is {}.",
-            low.count,
-            format_measure(low.median)
-        ),
-    );
-    if let Some(text) = lr_prose(low, is_cosine(board)) {
-        line(out, &text);
-    }
-    emit_lines(out, nears, &low_at);
-    section(
-        out,
-        &format!("WHY {} IS NOT THE WINNER EITHER", quiet.name.to_uppercase()),
-    );
-    line(out, &quiet_intro(quiet, nears.len(), reading, &quiet_names));
-    line(
-        out,
-        &format!(
-            "{}'s own deepest point is {}.",
-            english_list(&quiet_names),
-            format_measure(quiet.low)
-        ),
-    );
-    if let Some(text) = final_marker(reading, &low_names) {
-        line(out, &text);
-    }
-    emit_lines(out, nears, &quiet_only(&low_at, &quiet_at));
-    section(out, "SO: NO WINNER, AND THAT IS AN ANSWER");
-    line(
-        out,
-        &abstain_paragraph(low, quiet, &low_names, &quiet_names, seed_only(board)),
-    );
-}
-
-fn agree_argument(out: &mut String, reading: &Reading, weighing: &Weighing) {
-    let nears = &weighing.neighborhoods;
-    let low_at = lowest_indexes(nears);
-    let low_names = names_at(nears, &low_at);
-    section(out, "WHAT THE WEIGHING SAYS");
-    let same = if low_names.len() == 1 {
-        format!(
-            "The half-epoch median and the lowest sample are the same run, {}.",
-            low_names[0]
-        )
-    } else {
-        format!(
-            "The half-epoch median and the lowest sample are the same runs, {}.",
-            english_list(&low_names)
-        )
-    };
-    if same_names(&reading.quietest_end, &low_names) {
+    if weighing.abstain {
+        section(out, "Why no run wins");
+        let company = match low.next {
+            Some(next) if low.lone_low() => format!(
+                "{}'s {} is a lone sample: the next lowest near it is {}, more than twice as high.",
+                cap(&english_list(&low_names)),
+                format_measure(low.low),
+                format_measure(next)
+            ),
+            Some(next) => format!(
+                "{}'s {} is not a lone spike: the next lowest near it is {}.",
+                cap(&english_list(&low_names)),
+                format_measure(low.low),
+                format_measure(next)
+            ),
+            None => format!(
+                "{}'s {} is the only sample in its stretch.",
+                cap(&english_list(&low_names)),
+                format_measure(low.low)
+            ),
+        };
         line(
             out,
             &format!(
-                "{same} The lowest last sample belongs to that run as well ({}).",
-                last_values(reading, &reading.quietest_end)
+                "{company} But its stretch is noisier: its middle is {}, against {} for {}.",
+                format_measure(low.median),
+                format_measure(quiet.median),
+                english_list(&quiet_names)
+            ),
+        );
+        line(
+            out,
+            &format!(
+                "{} has the calmer stretch, but its own deepest point is {}, not the deepest. The deeper dip and the calmer stretch belong to different runs, and the report keeps both.",
+                cap(&english_list(&quiet_names)),
+                format_measure(quiet.low)
             ),
         );
     } else {
-        line(out, &same);
-        if !reading.quietest_end.is_empty() {
+        section(out, &format!("Why {} leads", english_list(&low_names)));
+        line(
+            out,
+            &format!(
+                "The half-epoch median and the lowest sample are the same {}, {}.",
+                if low_names.len() == 1 { "run" } else { "runs" },
+                english_list(&low_names)
+            ),
+        );
+        if !reading.quietest_end.is_empty() && !same_names(&reading.quietest_end, &low_names) {
             line(
                 out,
                 &format!(
@@ -348,35 +618,18 @@ fn agree_argument(out: &mut String, reading: &Reading, weighing: &Weighing) {
     if let Some(text) = final_marker(reading, &low_names) {
         line(out, &text);
     }
-    emit_lines(out, nears, &discussion_order(nears));
-}
-
-fn measured_note(out: &mut String, board: &Board, weighing: &Weighing) {
-    let nears = &weighing.neighborhoods;
-    let prose = decay_prose(nears);
-    let tangle = tangle_sentence(board, nears);
-    let rest = if weighing.abstain {
-        rest_indexes(nears)
-    } else {
-        Vec::new()
-    };
-    if prose.is_none() && tangle.is_none() && rest.is_empty() {
-        return;
-    }
-    section(out, "ONE MORE MEASURED NOTE");
-    if let Some(text) = prose {
+    if let Some(text) = decay_prose(nears) {
         line(out, &text);
     }
-    if let Some(text) = tangle {
+    if let Some(text) = tangle_sentence(board, nears) {
         line(out, &text);
     }
-    emit_lines(out, nears, &rest);
 }
 
-fn not_tested(out: &mut String, board: &Board) {
-    section(out, "WHAT WAS NOT TESTED");
+fn changed_and_not(out: &mut String, board: &Board) {
+    section(out, "What changed and what did not");
     if seed_only(board) {
-        line(out, "Everything except the seed.");
+        line(out, "Only the seed changed.");
     } else if board.series.len() <= 1 {
         line(
             out,
@@ -391,7 +644,7 @@ fn not_tested(out: &mut String, board: &Board) {
         line(
             out,
             &format!(
-                "Under test: {}. The fields below did not change.",
+                "Changed: {}. Everything below stayed the same.",
                 english_list(&labels)
             ),
         );
@@ -405,9 +658,8 @@ fn not_tested(out: &mut String, board: &Board) {
         line(
             out,
             &format!(
-                "Learning rate: {} on all {} runs. Since it never changed, these runs contain no evidence about it. Nothing here is a reason to raise or lower it, and this report declines to say anything about what a different rate would do.",
-                format_measure(rate),
-                count_word(board.series.len(), false)
+                "The learning rate, {}, was the same on every run, so these runs hold no evidence about it either way.",
+                format_measure(rate)
             ),
         );
     }
@@ -420,7 +672,7 @@ fn not_tested(out: &mut String, board: &Board) {
         line(
             out,
             &format!(
-                "LoRA scale (alpha/r): {} on all runs (alpha {}, rank {}). Listed for the record, not as a result.",
+                "LoRA scale (alpha/r) is {} on every run (alpha {}, rank {}).",
                 format_measure(alpha / rank),
                 format_measure(alpha),
                 format_measure(rank)
@@ -433,48 +685,198 @@ fn not_tested(out: &mut String, board: &Board) {
         line(
             out,
             &format!(
-                "Warmup: {} steps. A stored sample's epoch is not a step index, so this report does not place warmup on the epoch axis.",
+                "Warmup is {} steps. The samples are placed by epoch, not by step, so this report does not place warmup on the epoch axis.",
                 format_measure(steps)
             ),
         );
     }
     let assumptions = assumption_lines(board);
     if !assumptions.is_empty() {
-        line(out, "Assumptions — labeled, not results:");
+        line(out, "Assumptions, labeled, not results:");
         for item in assumptions {
             line(out, &format!("* {item}"));
         }
     }
 }
 
-fn next_steps(out: &mut String, board: &Board, weighing: &Weighing) {
-    section(out, "WHAT TO DO NEXT");
+fn earlier(out: &mut String, board: &Board, weighing: &Weighing, ledger: &Ledger) {
+    if ledger.is_empty() || weighing.neighborhoods.is_empty() {
+        return;
+    }
+    section(out, "Earlier weighings");
+    let here = crate::series::fingerprint(board);
+    let nears = &weighing.neighborhoods;
+    if let Some(before) = &ledger.same_runs {
+        let then = before.deepest();
+        let now = &nears[lowest_indexes(nears)[0]];
+        match then {
+            Some(then)
+                if then.name == now.name
+                    && then.low.to_bits() == now.low.to_bits()
+                    && before.runs.len() == nears.len() =>
+            {
+                line(
+                    out,
+                    &format!(
+                        "These runs were first weighed on {} and their deepest point has not moved since.",
+                        before.date
+                    ),
+                );
+            }
+            Some(then) => line(
+                out,
+                &format!(
+                    "When these runs were weighed on {}, the deepest point was {} ({}). Now it is {} ({}).",
+                    before.date,
+                    format_measure(then.low),
+                    then.name,
+                    format_measure(now.low),
+                    now.name
+                ),
+            ),
+            None => {}
+        }
+    }
+    for item in &ledger.same_recipe {
+        line(
+            out,
+            &format!(
+                "On {}, other runs of this same recipe: {}",
+                item.date,
+                summary(item)
+            ),
+        );
+    }
+    if !ledger.same_recipe.is_empty()
+        && let Some((low, high)) = middles(nears)
+    {
+        line(
+            out,
+            &format!(
+                "Today's middles run from {} to {}.",
+                format_measure(low),
+                format_measure(high)
+            ),
+        );
+    }
+    for item in &ledger.same_method {
+        let differs = recipe_difference(&item.fingerprint, &here);
+        let what = if differs.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", differs.join("; "))
+        };
+        line(
+            out,
+            &format!(
+                "On {}, a different recipe with the same method{what}: {}",
+                item.date,
+                summary(item)
+            ),
+        );
+    }
+}
+
+/// The shared fields where an earlier recipe differs from this one, as "LoRA rank 32 where this has 16".
+fn recipe_difference(earlier: &str, here: &str) -> Vec<String> {
+    let parse = |text: &str| match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(object)) => object,
+        _ => serde_json::Map::new(),
+    };
+    let (earlier, here) = (parse(earlier), parse(here));
+    let mut keys: Vec<&String> = earlier.keys().chain(here.keys()).collect();
+    keys.sort();
+    keys.dedup();
+    keys.into_iter()
+        .filter(|key| key.as_str() != "varying")
+        .filter_map(|key| {
+            let then = earlier.get(key.as_str());
+            let now = here.get(key.as_str());
+            if then == now {
+                return None;
+            }
+            let label = recipe_label(key);
+            Some(match (then, now) {
+                (Some(then), Some(now)) => format!(
+                    "{label} {} where this has {}",
+                    inventory_text(then),
+                    inventory_text(now)
+                ),
+                (Some(then), None) => {
+                    format!("{label} {} shared there, not here", inventory_text(then))
+                }
+                (None, _) => format!("{label} not shared there"),
+            })
+        })
+        .collect()
+}
+
+/// One earlier weighing in a sentence: how many runs, the verdict, the middles, the deepest point.
+fn summary(item: &Weighed) -> String {
+    let n = item.runs.len();
+    let mut text = format!(
+        "{} {}",
+        count_word(n, false),
+        if n == 1 { "run" } else { "runs" }
+    );
+    if n >= 2 {
+        if item.abstain {
+            text.push_str(", no winner");
+        } else if let Some(lead) = item.deepest() {
+            text.push_str(&format!(", {} led", lead.name));
+        }
+    }
+    if let Some((low, high)) = item.middles() {
+        if low.to_bits() == high.to_bits() {
+            text.push_str(&format!(", middle {}", format_measure(low)));
+        } else {
+            text.push_str(&format!(
+                ", middles from {} to {}",
+                format_measure(low),
+                format_measure(high)
+            ));
+        }
+    }
+    if let Some(deepest) = item.deepest() {
+        text.push_str(&format!(
+            ", deepest point {} ({})",
+            format_measure(deepest.low),
+            deepest.name
+        ));
+    }
+    text.push('.');
+    text
+}
+
+fn middles(nears: &[Neighborhood]) -> Option<(f64, f64)> {
+    bounds(&nears.iter().map(|near| near.median).collect::<Vec<_>>())
+}
+
+fn next_steps(out: &mut String, board: &Board, weighing: &Weighing, spread: Option<&Spread>) {
+    section(out, "What to do next");
     let mut steps = Vec::new();
     let n = board.series.len();
     let nears = &weighing.neighborhoods;
+    let separation = spread.map(|spread| spread.separation);
     if n <= 1 {
         steps.push("Open a second run of the same recipe before changing a setting.".to_string());
-    } else if seed_only(board) && weighing.abstain {
-        let low = names_at(nears, &lowest_indexes(nears));
-        let quiet = names_at(nears, &quiet_indexes(nears));
-        steps.push(
-            "Changing nothing is a legitimate outcome. The recipe produced stable runs whose differences are mostly seed texture, and no stored measurement here crowns a winner.".to_string(),
-        );
-        steps.push(format!(
-            "If you want a winner, run more seeds of this identical recipe. If {}'s steadiness repeats across more draws, that becomes evidence. If deep one-point dips like {}'s keep appearing and vanishing, that is evidence too. [placeholder: what an additional seed costs on this rig is not in this report]",
-            english_list(&quiet),
-            english_list(&low)
-        ));
-        steps.push(
-            "Whatever you run next, compare runs by the middle of the half epoch around the low, not by the single lowest point. The single point is where these curves are noisiest. The body is where they can actually be told apart.".to_string(),
-        );
     } else if seed_only(board) {
-        steps.push(
-            "The half-epoch median agrees with the lowest sample. That agreement is the result of this weighing. The shared recipe was still not tested, so this comparison is not a reason to change a setting.".to_string(),
-        );
-        steps.push(
-            "Compare later runs by the middle of the half epoch around the low, not by the single lowest point.".to_string(),
-        );
+        if weighing.abstain {
+            steps.push(
+                "Changing nothing is a fair choice. No stored measurement here crowns a run, and no setting was tested.".to_string(),
+            );
+        } else {
+            let lead = english_list(&names_at(nears, &lowest_indexes(nears)));
+            steps.push(format!(
+                "{} leads, but the recipe was not tested, so this is not a reason to change a setting.",
+                cap(&lead)
+            ));
+        }
+        steps.push(match separation {
+            Some(Separation::InsideNoise) => "If you need a pick, run more seeds of this recipe and compare their middles. One more run cannot settle a difference smaller than the noise inside a single run.".to_string(),
+            Some(Separation::Apart) => "The seeds separate on this recipe, so one run of it is a weak sample. Run several seeds of any recipe you want to compare with this one.".to_string(),
+            _ => "If you need a pick, run more seeds of this recipe and compare their middles.".to_string(),
+        });
     } else if rank_moves(board) || alpha_moves(board) {
         if seeds_differ(board) {
             steps.push(
@@ -486,9 +888,6 @@ fn next_steps(out: &mut String, board: &Board, weighing: &Weighing) {
                     .to_string(),
             );
         }
-        steps.push(
-            "Compare runs by the middle of the half epoch around the low, not by the single lowest point.".to_string(),
-        );
     } else {
         let labels: Vec<String> = board
             .varying
@@ -503,8 +902,10 @@ fn next_steps(out: &mut String, board: &Board, weighing: &Weighing) {
                 english_list(&labels)
             }
         ));
+    }
+    if n >= 2 {
         steps.push(
-            "Compare runs by the middle of the half epoch around the low, not by the single lowest point.".to_string(),
+            "Compare runs by the middle of the stretch around the low, not by the single deepest point.".to_string(),
         );
     }
     push_checkpoint(&mut steps, board, nears);
@@ -514,10 +915,10 @@ fn next_steps(out: &mut String, board: &Board, weighing: &Weighing) {
 }
 
 fn cannot_tell(out: &mut String, board: &Board) {
-    section(out, "WHAT THIS REPORT CANNOT TELL YOU");
+    section(out, "What this report cannot tell you");
     let mut parts = Vec::new();
     if !board.shared.is_empty() {
-        parts.push("whether any shared setting is right".to_string());
+        parts.push("Whether any shared setting is right.".to_string());
     }
     let mut untouched = Vec::new();
     if shared_f64(board, "learning_rate").is_some() && !varies(board, "learning_rate") {
@@ -535,25 +936,22 @@ fn cannot_tell(out: &mut String, board: &Board) {
     if !untouched.is_empty() {
         let items: Vec<String> = untouched.into_iter().map(str::to_string).collect();
         let because = if items.len() == 1 {
-            "because that did not change"
+            "That did not change."
         } else {
-            "because none of those changed"
+            "None of those changed."
         };
         parts.push(format!(
-            "whether a different {} would do better, {because}",
+            "Whether a different {} would do better. {because}",
             english_or(&items)
         ));
     }
+    parts.push("What the saved checkpoint files hold. This report reads the stored samples, not the checkpoints.".to_string());
     parts.push(
-        "which saved checkpoint file to keep [placeholder: checkpoint contents are not in this report]".to_string(),
+        "Anything that needs the web or a cloud model. It uses only stored measurements and the reference catalog inside the program.".to_string(),
     );
-    parts.push(
-        "anything that needs the web or a cloud model. This page uses only stored measurements and the reference catalog inside the program".to_string(),
-    );
-    line(
-        out,
-        &format!("This report cannot tell you {}.", english_list(&parts)),
-    );
+    for part in parts {
+        line(out, &format!("* {part}"));
+    }
 }
 
 fn sources(out: &mut String, board: &Board, weighing: &Weighing) {
@@ -584,34 +982,28 @@ fn sources(out: &mut String, board: &Board, weighing: &Weighing) {
     if varies(board, "weight_decay") {
         keys.push("weight_decay");
     }
-    let mut cited = Vec::new();
-    for key in keys {
-        if let Some(card) = weighing.cards.iter().find(|card| card.key == key) {
-            cited.push((key, format!("* {} — {}", card.cite, card.url)));
-        }
-    }
+    let cited: Vec<_> = keys
+        .into_iter()
+        .filter_map(|key| weighing.cards.iter().find(|card| card.key == key))
+        .collect();
     if cited.is_empty() {
         return;
     }
-    section(out, "WHERE THIS COMES FROM");
-    for (key, text) in cited {
+    section(out, "Where this comes from");
+    for card in cited {
+        let mut text = format!("* {} {} {}", card.supports, card.cite, card.url);
+        if card.key == "lr_scheduler" {
+            text.push_str(" This comparison does not measure warm restarts.");
+        }
+        if card.key == "learning_rate" {
+            text.push_str(" It does not say what learning rate to use.");
+        }
         line(out, &text);
-        if key == "lr_scheduler" {
-            line(
-                out,
-                "The cosine card is the decay inside the run. This comparison does not measure warm restarts.",
-            );
-        }
-        if key == "learning_rate" {
-            line(
-                out,
-                "That card is cited to name a rule that was not applied. It does not say what learning rate to use.",
-            );
-        }
     }
 }
 
-fn lowest_sentence(nears: &[Neighborhood]) -> Option<String> {
+/// "0.0176, from seed 13 at epoch 7" for the deepest point, or the tied names.
+fn deepest_clause(nears: &[Neighborhood]) -> Option<String> {
     let indexes = lowest_indexes(nears);
     let first = indexes.first().copied()?;
     let near = &nears[first];
@@ -622,108 +1014,13 @@ fn lowest_sentence(nears: &[Neighborhood]) -> Option<String> {
         String::new()
     };
     Some(format!(
-        "The lowest loss any run recorded is {}, from {}{epoch}. That point happened, so it stays on the chart and in this report, whether or not it wins anything.",
+        "{}, from {}{epoch}",
         format_measure(near.low),
         english_list(&names)
     ))
 }
 
-fn company_prose(near: &Neighborhood, nears: &[Neighborhood]) -> String {
-    let mut text = match near.next {
-        Some(next) if near.lone_low() => format!(
-            "The low is a single sample: the next-lowest point nearby is {}, more than twice this low.",
-            format_measure(next)
-        ),
-        Some(next) => format!(
-            "The next-lowest point nearby is {}, within twice its value.",
-            format_measure(next)
-        ),
-        None => "The window around that low holds only that point.".to_string(),
-    };
-    let all_have_next = nears.iter().all(|item| item.next.is_some());
-    if all_have_next && !nears.iter().any(Neighborhood::lone_low) {
-        text.push_str(" None of the lows fails that company test.");
-    }
-    text
-}
-
-fn lr_prose(near: &Neighborhood, cosine: bool) -> Option<String> {
-    let flag = near.decayed()?;
-    let place = if flag {
-        "under a twentieth"
-    } else {
-        "still above a twentieth"
-    };
-    let mut text = format!(
-        "When {} reached {} its learning rate was {}, {place} of its peak of {}.",
-        near.name,
-        format_measure(near.low),
-        format_measure(near.lr?),
-        format_measure(near.lr_max?)
-    );
-    let far = near.low > 0.0 && near.median > near.low * 2.0;
-    if flag && cosine && far {
-        text.push_str(" The run was at the tail of its cosine schedule. A point this far from the middle of its neighborhood, reached while the schedule is idling, is texture, not a place the run settled.");
-    }
-    Some(text)
-}
-
-fn quiet_intro(
-    quiet: &Neighborhood,
-    n: usize,
-    reading: &Reading,
-    quiet_names: &[String],
-) -> String {
-    let mut text = format!(
-        "{} has the calmest neighborhood of the {}: a middle value of {} across {} samples",
-        english_list(quiet_names),
-        count_word(n, false),
-        format_measure(quiet.median),
-        quiet.count
-    );
-    if same_names(&reading.quietest_end, quiet_names) {
-        text.push_str(&format!(
-            ", and the lowest last sample ({})",
-            last_values(reading, quiet_names)
-        ));
-    }
-    text.push('.');
-    if !same_names(&reading.quietest_end, quiet_names) && !reading.quietest_end.is_empty() {
-        text.push_str(&format!(
-            " The lowest last sample is {}, from {}. That is a different run from the calmest neighborhood.",
-            last_values(reading, &reading.quietest_end),
-            english_list(&reading.quietest_end)
-        ));
-    }
-    text
-}
-
-fn abstain_paragraph(
-    low: &Neighborhood,
-    quiet: &Neighborhood,
-    low_names: &[String],
-    quiet_names: &[String],
-    seed_only: bool,
-) -> String {
-    let low_names = english_list(low_names);
-    let quiet_names = english_list(quiet_names);
-    let mut text = format!(
-        "This comparison has no winner, and that is the result of weighing, not a failure to weigh. The deepest single point measured anywhere in these runs is {low_loss}, from {low_names} at epoch {low_at} — and it stays on this page and on the chart whether or not it wins. The calmest stretch around a low belongs to a different run, {quiet_names}: the middle of the {quiet_n} samples around its low is {quiet_median}, where {low_names}'s neighborhood sits at {low_median}. Those medians are not the same, and this report will not pretend they are. But the two claims point at different runs, and the body of these curves is exactly where these runs are hardest to tell apart, so no stored measurement in this comparison settles it. To be plain about what that means: this is not \"the runs are all the same\" — {quiet_median} and {low_median} differ. And it is not \"{low_names} is the best run\" — the stretch around its low is not the calmest one measured. Both facts are kept: the deeper dip and the calmer neighborhood.",
-        low_loss = format_measure(low.low),
-        low_at = format_measure(low.at),
-        quiet_n = quiet.count,
-        quiet_median = format_measure(quiet.median),
-        low_median = format_measure(low.median),
-    );
-    if seed_only {
-        text.push_str(" Your next step is more evidence at this same recipe, not a change to it, and changing nothing on the strength of that answer is a legitimate choice, because nothing about the recipe was tested.");
-    } else {
-        text.push_str(" The recipe also changes in this comparison, so this page does not treat the difference as a test of one setting.");
-    }
-    text
-}
-
-fn final_marker(reading: &Reading, low_names: &[String]) -> Option<String> {
+fn final_winners(reading: &Reading) -> Option<(Vec<String>, f64, f64)> {
     let known: Vec<(&str, f64)> = reading
         .series
         .iter()
@@ -733,24 +1030,24 @@ fn final_marker(reading: &Reading, low_names: &[String]) -> Option<String> {
                 .map(|value| (series.name.as_str(), value))
         })
         .collect();
-    if known.is_empty() {
-        return None;
-    }
     let min = known
         .iter()
         .map(|(_, value)| *value)
-        .min_by(|left, right| left.total_cmp(right))
-        .expect("known finals");
+        .min_by(|left, right| left.total_cmp(right))?;
     let max = known
         .iter()
         .map(|(_, value)| *value)
-        .max_by(|left, right| left.total_cmp(right))
-        .expect("known finals");
-    let winners: Vec<String> = known
+        .max_by(|left, right| left.total_cmp(right))?;
+    let winners = known
         .iter()
         .filter(|(_, value)| value.to_bits() == min.to_bits())
         .map(|(name, _)| (*name).to_string())
         .collect();
+    Some((winners, min, max))
+}
+
+fn final_marker(reading: &Reading, low_names: &[String]) -> Option<String> {
+    let (winners, min, max) = final_winners(reading)?;
     let hides = winners.iter().all(|name| !low_names.contains(name));
     let points = stored_points(reading);
     if hides {
@@ -765,13 +1062,13 @@ fn final_marker(reading: &Reading, low_names: &[String]) -> Option<String> {
             String::new()
         } else {
             format!(
-                ", best of a {}–{} cluster",
+                ", the lowest of {} to {}",
                 format_measure(min),
                 format_measure(max)
             )
         };
         Some(format!(
-            "Ranked by training_summary.final_loss — {} for {}{cluster} — {} would be crowned, and {}'s {} would disappear from the page, because final_loss is not one of the {points}.",
+            "Ranked by training_summary.final_loss ({} for {}{cluster}), {} would be crowned and {}'s {} would disappear from the page, because final_loss is not one of the {points}.",
             format_measure(min),
             english_list(&winners),
             english_list(&winners),
@@ -802,29 +1099,32 @@ fn decay_prose(nears: &[Neighborhood]) -> Option<String> {
     }
     if above.is_empty() && under.len() == nears.len() {
         return Some(
-            "Every lowest sample was reached when the learning rate had already decayed under a twentieth of its peak.".to_string(),
+            "Every deepest point came after the learning rate had decayed under a twentieth of its peak.".to_string(),
         );
     }
     if under.is_empty() {
         return Some(
-            "None of these lows was reached under a twentieth of that run's peak learning rate."
+            "No deepest point came after the learning rate had decayed under a twentieth of its peak."
                 .to_string(),
         );
     }
-    if above.is_empty() {
-        return Some(format!(
-            "{} lows ({}) were reached when the learning rate had already decayed under a twentieth of its peak.",
-            under.len(),
-            english_list(&under)
-        ));
-    }
+    let under_verb = if under.len() == 1 { "was" } else { "were" };
+    let above_verb = if above.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " {} reached {} while the rate was still above that.",
+            cap(&english_list(&above)),
+            if above.len() == 1 {
+                "its deepest point"
+            } else {
+                "their deepest points"
+            }
+        )
+    };
     Some(format!(
-        "{} of the {} lows ({}) were reached when the learning rate had already decayed under a twentieth of its peak. The other {} ({}) reached theirs while the rate was still above that.",
-        count_word(under.len(), true),
-        count_word(nears.len(), false),
-        english_list(&under),
-        count_word(above.len(), false),
-        english_list(&above)
+        "The deepest points of {} {under_verb} reached after the learning rate had decayed under a twentieth of its peak.{above_verb}",
+        english_list(&under)
     ))
 }
 
@@ -838,7 +1138,7 @@ fn tangle_sentence(board: &Board, nears: &[Neighborhood]) -> Option<String> {
         None => String::new(),
     };
     Some(format!(
-        "Because every run used the same cosine schedule{span}, \"low late\" and \"the schedule ran out\" are tangled together in this data, and this comparison cannot untangle them."
+        "Every run used the same cosine schedule{span}, so a late low and the schedule running out happen together here, and this comparison cannot tell them apart."
     ))
 }
 
@@ -852,7 +1152,7 @@ fn assumption_lines(board: &Board) -> Vec<String> {
         }
     } else if alpha_moves(board) && !rank_moves(board) && rate_shared {
         lines.push(
-            "Assumption, labeled, not a result: the catalog states a formula (scale = alpha/r). It does not state how an alpha change changes loss. That scale change is assumed to act like a learning-rate change on the adapter. It is not measured here.".to_string(),
+            "The catalog states a formula (scale = alpha/r). It does not state how an alpha change changes loss. This report assumes the scale change acts like a learning-rate change on the adapter. That is not measured here.".to_string(),
         );
     } else if scale_discussed(board) && !rank_moves(board) && !alpha_moves(board) && rate_shared {
         lines.push(
@@ -864,7 +1164,7 @@ fn assumption_lines(board: &Board) -> Vec<String> {
             .map(format_measure)
             .unwrap_or_else(|| "the same value".to_string());
         lines.push(format!(
-            "The batch rule (when the batch is multiplied by k, multiply the learning rate by k) was not applied: the effective batch stayed at {batch} in every run. Note this so no one later believes the learning rate was chosen by that rule."
+            "The batch rule (multiply the batch by k, multiply the learning rate by k) was not applied: the effective batch stayed at {batch} on every run."
         ));
     }
     lines
@@ -891,19 +1191,8 @@ fn rank_scale_assumption(board: &Board) -> Option<String> {
         _ => format!("across {}", english_list(&scales)),
     };
     Some(format!(
-        "Assumption, labeled, not a result: the catalog states a formula (scale = alpha/r). It does not state how a rank change changes loss. With alpha unchanged, changing rank changes alpha/r {change}, and this report assumes that scale change acts the way a learning-rate change on the adapter would. That is assumed here, not measured."
+        "The catalog states a formula (scale = alpha/r). It does not state how a rank change changes loss. With alpha unchanged, changing rank moves alpha/r {change}, and this report assumes that acts like a learning-rate change on the adapter. That is not measured here."
     ))
-}
-
-fn rank_intro(board: &Board) -> String {
-    let lever = if rank_moves(board) && alpha_moves(board) {
-        "LoRA rank and LoRA alpha"
-    } else if rank_moves(board) {
-        "LoRA rank"
-    } else {
-        "LoRA alpha"
-    };
-    format!("The lever under test is {lever}. {}", samples_clause(board))
 }
 
 fn rank_detail(board: &Board) -> String {
@@ -919,7 +1208,7 @@ fn rank_detail(board: &Board) -> String {
                 format_measure(alpha / rank)
             )),
             (Some(rank), _) => parts.push(format!(
-                "{} rank {} (scale [placeholder: alpha for this run is not in the recipe])",
+                "{} rank {} (no alpha in its recipe, so no scale)",
                 series.name,
                 format_measure(rank)
             )),
@@ -929,10 +1218,7 @@ fn rank_detail(board: &Board) -> String {
             _ => parts.push(format!("{} has no LoRA rank in the recipe", series.name)),
         }
     }
-    format!(
-        "Under test: {}. Everything else that is shared is listed with what was not tested.",
-        parts.join("; ")
-    )
+    format!("Under test: {}.", parts.join("; "))
 }
 
 fn inventory(board: &Board) -> Option<String> {
@@ -946,11 +1232,7 @@ fn inventory(board: &Board) -> Option<String> {
     if parts.is_empty() {
         return None;
     }
-    Some(format!(
-        "On all {} runs, identically: {}.",
-        count_word(board.series.len(), false),
-        parts.join(", ")
-    ))
+    Some(format!("Shared by every run: {}.", parts.join(", ")))
 }
 
 fn inventory_text(value: &Value) -> String {
@@ -969,16 +1251,8 @@ fn push_checkpoint(steps: &mut Vec<String>, board: &Board, nears: &[Neighborhood
     if nears.is_empty() || !checkpoint_misses_lows(&epochs, nears) {
         return;
     }
-    let min_at = nears
-        .iter()
-        .map(|near| near.at)
-        .min_by(|left, right| left.total_cmp(right))
-        .expect("nears");
-    let max_at = nears
-        .iter()
-        .map(|near| near.at)
-        .max_by(|left, right| left.total_cmp(right))
-        .expect("nears");
+    let (min_at, max_at) =
+        bounds(&nears.iter().map(|near| near.at).collect::<Vec<_>>()).expect("nears");
     let when = if (min_at - max_at).abs() < 1e-9 {
         format!("at epoch {}", format_measure(min_at))
     } else {
@@ -996,49 +1270,17 @@ fn push_checkpoint(steps: &mut Vec<String>, board: &Board, nears: &[Neighborhood
             .collect::<Vec<_>>(),
     );
     steps.push(format!(
-        "Record-keeping note, not a recipe change: every low in these runs occurred {when}, and checkpoints were saved at epochs {list}, so no saved checkpoint sits at the moments this report discusses. If keeping such a moment matters to you, save one nearer that band next time. This report has no evidence that doing so changes any loss."
+        "A record-keeping note, not a recipe change: every deepest point fell {when}, and checkpoints were saved at epochs {list}, so no saved checkpoint holds the weights from those moments. Save one in that band next time if you want to keep them. Nothing here says that changes any loss."
     ));
 }
 
-fn emit_lines(out: &mut String, nears: &[Neighborhood], indexes: &[usize]) {
-    for index in indexes {
-        let near = &nears[*index];
-        let samples = if near.count == 1 { "sample" } else { "samples" };
-        let mut text = format!(
-            "  {}: low {} at {}. Half an epoch holds {} {}, median {}.",
-            near.name,
-            format_measure(near.low),
-            format_measure(near.at),
-            near.count,
-            samples,
-            format_measure(near.median)
-        );
-        if let Some(next) = near.next {
-            text.push_str(&format!(" Next lowest {}.", format_measure(next)));
-            if near.lone_low() {
-                text.push_str(" The low is a single sample.");
-            }
-        }
-        line(out, &text);
-        if let Some(text) = lr_line(near) {
-            line(out, &text);
-        }
+/// Capitalize the first letter, for a run name that starts a sentence.
+fn cap(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
     }
-}
-
-fn lr_line(near: &Neighborhood) -> Option<String> {
-    let flag = near.decayed()?;
-    let place = if flag {
-        "under a twentieth"
-    } else {
-        "not under a twentieth"
-    };
-    Some(format!(
-        "  Learning rate at the lowest sample, {}: {} ({place} of max {}).",
-        near.name,
-        format_measure(near.lr?),
-        format_measure(near.lr_max?)
-    ))
 }
 
 fn loss_span_sentence(reading: &Reading) -> Option<String> {
@@ -1109,7 +1351,7 @@ fn climb_sentence(reading: &Reading, nears: &[Neighborhood]) -> Option<String> {
     } else {
         Some(format!(
             "The lowest stored points fell {when}. {} did not climb after the low.",
-            english_list(&exceptions)
+            cap(&english_list(&exceptions))
         ))
     }
 }
@@ -1279,23 +1521,6 @@ fn discussion_order(nears: &[Neighborhood]) -> Vec<usize> {
         }
     }
     order
-}
-
-fn rest_indexes(nears: &[Neighborhood]) -> Vec<usize> {
-    let used = discussion_order(nears);
-    let low = lowest_indexes(nears);
-    let quiet = quiet_indexes(nears);
-    used.into_iter()
-        .filter(|index| !low.contains(index) && !quiet.contains(index))
-        .collect()
-}
-
-fn quiet_only(low: &[usize], quiet: &[usize]) -> Vec<usize> {
-    quiet
-        .iter()
-        .copied()
-        .filter(|index| !low.contains(index))
-        .collect()
 }
 
 fn lowest_indexes(nears: &[Neighborhood]) -> Vec<usize> {
@@ -1641,32 +1866,31 @@ mod tests {
     }
 
     #[test]
-    fn an_abstaining_seed_report_keeps_both_facts_and_cites_only_the_used_cards() {
+    fn an_abstaining_seed_report_leads_with_the_answer_and_keeps_both_facts() {
         let board = abstain_board();
         assert_eq!(
             report_file_name(&board, Some("2026-10-05")),
             "runforge-report-2026-10-05-3-runs.txt"
         );
         let report = comparison_report(&board, Some("2026-10-05"));
-        assert!(report.contains("Report written 2026-10-05 UTC."));
-        assert!(!report.contains("Measured"));
-        assert!(report.contains("This comparison has no winner"));
-        assert!(report.contains("the runs are all the same"));
-        assert!(report.contains("is the best run"));
-        assert!(report.contains("nothing about the recipe was tested"));
-        assert!(report.contains("seed 13"));
-        assert!(report.contains("seed 1024"));
-        assert!(report.contains("0.02"));
+        assert!(report.contains("Written 2026-10-05 UTC."));
+        let short = report.find("In short").unwrap();
+        assert!(short < report.find("The runs").unwrap());
+        assert!(report[short..].starts_with(
+            "In short\nNo run wins. Seed 13 has the deepest single point, 0.02 at epoch 7."
+        ));
+        assert!(report.contains("Seed 1024 has the calmest stretch"));
+        assert!(report.contains("seed 1024 would be crowned"));
+        assert!(report.contains("Seed 271 reached its deepest point"));
+        assert!(report.contains("these runs say nothing about any setting"));
         assert!(report.contains("would disappear"));
-        assert!(
-            report.contains("still above a twentieth") || report.contains("not under a twentieth")
-        );
-        assert!(report.contains("LoRA scale (alpha/r): 2"));
+        assert!(report.contains("still above a twentieth"));
+        assert!(report.contains("middle half from"));
+        assert!(report.contains("LoRA scale (alpha/r) is 2"));
         assert!(report.contains("no evidence about it"));
         assert!(report.contains("does not place warmup on the epoch axis"));
         assert!(report.contains("was not applied"));
         assert!(report.contains("no saved checkpoint"));
-        assert!(report.contains("Half an epoch"));
         assert!(report.contains("2002.06305"));
         assert!(report.contains("1608.03983"));
         assert!(report.contains("2106.09685"));
@@ -1674,6 +1898,9 @@ mod tests {
         assert!(!report.contains("1211.5063"));
         assert!(!report.contains("srivastava14a"));
         assert!(!report.contains("1711.05101"));
+        assert!(!report.contains("placeholder"));
+        assert!(!report.contains("texture"));
+        assert!(!report.contains("Earlier weighings"));
         assert!(!report.contains("**"));
         assert!(report.lines().all(|line| !line.starts_with('#')));
         assert!(!report.contains("move the learning rate"));
@@ -1681,6 +1908,79 @@ mod tests {
         let omission = orientation_omission(&board);
         assert!(omission.contains("did not pick a winner"));
         assert!(omission.contains("0.02"));
+    }
+
+    #[test]
+    fn headings_are_short_unpunctuated_lines() {
+        let report = comparison_report(&abstain_board(), Some("2026-10-05"));
+        let headings: Vec<&str> = report.lines().filter(|line| is_heading(line)).collect();
+        assert_eq!(
+            headings,
+            vec![
+                "RunForge report",
+                "In short",
+                "What happened",
+                "The runs",
+                "Seed 13",
+                "Seed 1024",
+                "Seed 271",
+                "Why no run wins",
+                "What changed and what did not",
+                "What to do next",
+                "What this report cannot tell you",
+                "Where this comes from",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_spread_sentence_follows_the_measured_separation() {
+        let inside = Spread {
+            gap: 0.01,
+            narrowest: 0.05,
+            widest: 0.08,
+            separation: Separation::InsideNoise,
+        };
+        assert!(spread_sentence(&inside).contains("smaller than the noise inside a single run"));
+        let apart = Spread {
+            gap: 0.2,
+            narrowest: 0.05,
+            widest: 0.08,
+            separation: Separation::Apart,
+        };
+        assert!(spread_sentence(&apart).contains("larger than the noise inside a single run"));
+        let partial = Spread {
+            gap: 0.06,
+            narrowest: 0.05,
+            widest: 0.08,
+            separation: Separation::Partial,
+        };
+        assert!(spread_sentence(&partial).contains("only partly separate"));
+    }
+
+    #[test]
+    fn earlier_weighings_set_this_board_beside_the_ledger() {
+        let board = abstain_board();
+        let mut earlier = crate::ledger::weighed_now(&board, "2026-09-01");
+        for run in &mut earlier.runs {
+            run.name = format!("{} (old)", run.name);
+            run.median += 0.5;
+        }
+        let ledger = Ledger {
+            same_runs: Some(crate::ledger::weighed_now(&board, "2026-10-01")),
+            same_recipe: vec![earlier],
+            same_method: Vec::new(),
+        };
+        let report = comparison_report_with(&board, Some("2026-10-05"), &ledger);
+        assert!(report.contains("Earlier weighings"));
+        assert!(report.contains("first weighed on 2026-10-01"));
+        assert!(
+            report.contains("On 2026-09-01, other runs of this same recipe: three runs, no winner")
+        );
+        assert!(report.contains("Today's middles run from"));
+        assert!(
+            report.find("Earlier weighings").unwrap() < report.find("What to do next").unwrap()
+        );
     }
 
     #[test]
@@ -1714,14 +2014,13 @@ mod tests {
         let report = comparison_report(&board, None);
         assert!(report.contains("The two runs differ in rank and in seed"));
         assert!(report.contains("attributed to the rank alone"));
+        assert!(report.contains("differ in the seed as well"));
         assert!(report.contains("scale 2"));
         assert!(report.contains("scale 1"));
         assert!(report.contains("from 2 to 1"));
-        assert!(
-            report.contains("a spread measure for the neighborhood window is not computed today")
-        );
-        assert!(!report.contains("nothing about the recipe was tested"));
-        assert!(!report.contains("Listed for the record, not as a result"));
+        assert!(!report.contains("placeholder"));
+        assert!(!report.contains("say nothing about any setting"));
+        assert!(!report.contains("LoRA scale (alpha/r) is"));
         assert!(!report.contains("**"));
     }
 
@@ -1743,7 +2042,8 @@ mod tests {
         };
         let report = comparison_report(&board, None);
         assert!(report.contains("does not credit the rank change"));
+        assert!(report.contains("on one seed"));
         assert!(!report.contains("differ in rank and in seed"));
-        assert!(!report.contains("nothing about the recipe was tested"));
+        assert!(!report.contains("say nothing about any setting"));
     }
 }

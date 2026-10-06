@@ -3,15 +3,17 @@
 use eframe::egui::{self, Color32, RichText, Stroke};
 use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, Reading, Sample, SeriesRead, Weighing, band_segments, comparison_report, epoch_floor,
-    format_measure, loss_segments, low_band, orientation_allowed, orientation_omission,
-    recipe_keys, recipe_label, recipe_marks, recipe_text, spikes_above, utc_date, weigh,
+    Board, Book, Hypothesis, LearnedTool, Ledger, NOTE_LIMIT, Reading, Sample, SeriesRead, Step,
+    Weighing, band_segments, comparison_report_full, epoch_floor, format_measure, is_heading,
+    loss_segments, low_band, orientation_allowed, orientation_omission, recipe_keys, recipe_label,
+    recipe_marks, recipe_text, spikes_above, utc_date, weigh, wording_problem,
 };
 
 pub enum InstrumentAction {
     None,
     Ask,
     SaveReport,
+    TryFormula,
     Focus(String),
 }
 
@@ -20,7 +22,19 @@ pub struct SidecarView<'a> {
     pub status: &'a str,
     pub answer: &'a str,
     pub can_ask: bool,
-    pub earlier: &'a [String],
+    /// Earlier weighings of these runs, this recipe, or this method.
+    pub ledger: &'a Ledger,
+    /// Hypotheses for this method, each with its latest test.
+    pub hypotheses: &'a [Hypothesis],
+    /// Learned tools.
+    pub tools: &'a [LearnedTool],
+    /// The checkpoints that issue verdicts.
+    pub book: &'a Book,
+    /// The calls of the last workbench session.
+    pub trace: &'a [Step],
+    /// The formula box and what it last gave.
+    pub formula: &'a mut String,
+    pub formula_lines: &'a [String],
     pub blocked: bool,
 }
 
@@ -47,12 +61,19 @@ pub fn draw_instrument(
     ui: &mut egui::Ui,
     board: &Board,
     reading: &Reading,
-    sidecar: &SidecarView<'_>,
+    sidecar: &mut SidecarView<'_>,
     focus: Option<&str>,
 ) -> InstrumentAction {
     let dark = ui.visuals().dark_mode;
     let weighing = weigh(board);
-    let report = comparison_report(board, report_date().as_deref());
+    let report = comparison_report_full(
+        board,
+        report_date().as_deref(),
+        sidecar.ledger,
+        sidecar.hypotheses,
+        sidecar.tools,
+        sidecar.book,
+    );
     let omission = orientation_omission(board);
     let mut action = InstrumentAction::None;
     egui::Panel::right("sidecar")
@@ -392,7 +413,7 @@ fn draw_sidecar(
     ui: &mut egui::Ui,
     reading: &Reading,
     weighing: &Weighing,
-    sidecar: &SidecarView<'_>,
+    sidecar: &mut SidecarView<'_>,
     report: &str,
     omission: &str,
 ) -> InstrumentAction {
@@ -434,14 +455,23 @@ fn draw_sidecar(
                 ui.add_space(8.0);
                 model_note(ui, "", omission);
             }
-            if !sidecar.answer.is_empty() && orientation_allowed(sidecar.answer) {
+            if !sidecar.answer.is_empty() && wording_problem(sidecar.answer, NOTE_LIMIT).is_none() {
                 ui.add_space(8.0);
-                model_note(ui, "How to read this page", sidecar.answer);
+                model_note(
+                    ui,
+                    "The model's note (its words, not a measurement)",
+                    sidecar.answer,
+                );
             } else if let Some(remembered) = remembered_note(sidecar.memory, reading)
-                && orientation_allowed(&remembered)
+                && (orientation_allowed(&remembered)
+                    || wording_problem(&remembered, NOTE_LIMIT).is_none())
             {
                 ui.add_space(8.0);
                 model_note(ui, "Remembered", &remembered);
+            }
+            ui.add_space(8.0);
+            if draw_bench(ui, sidecar) {
+                action = InstrumentAction::TryFormula;
             }
             if !weighing.cards.is_empty() {
                 ui.add_space(8.0);
@@ -458,15 +488,73 @@ fn draw_sidecar(
                         }
                     });
             }
-            if !sidecar.earlier.is_empty() {
-                ui.add_space(8.0);
-                ui.label(RichText::new("Earlier readings").strong());
-                for note in sidecar.earlier {
-                    ui.add(egui::Label::new(RichText::new(plain_note(note)).small()).wrap());
+        });
+    action
+}
+
+/// The workbench: a formula box, the last session's calls, and the learned tools.
+/// Returns true when Run was pressed.
+fn draw_bench(ui: &mut egui::Ui, sidecar: &mut SidecarView<'_>) -> bool {
+    let mut run = false;
+    egui::CollapsingHeader::new("Workbench")
+        .default_open(true)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                RichText::new("Try a formula, such as last / low.")
+                    .small()
+                    .weak(),
+            );
+            ui.horizontal(|ui| {
+                let field = ui.add(
+                    egui::TextEdit::singleline(sidecar.formula)
+                        .desired_width(ui.available_width() - 48.0)
+                        .hint_text("formula"),
+                );
+                let entered =
+                    field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                if ui.button("Run").clicked() || entered {
+                    run = true;
+                }
+            });
+            for line in sidecar.formula_lines {
+                ui.add(egui::Label::new(RichText::new(line).small()).wrap());
+            }
+            if !sidecar.trace.is_empty() {
+                ui.add_space(6.0);
+                egui::CollapsingHeader::new(format!("Last session: {} calls", sidecar.trace.len()))
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        for step in sidecar.trace {
+                            ui.label(
+                                RichText::new(format!("{} {}", step.tool, step.args))
+                                    .small()
+                                    .strong(),
+                            );
+                            ui.add(egui::Label::new(RichText::new(&step.result).small()).wrap());
+                            ui.add_space(4.0);
+                        }
+                    });
+            }
+            if !sidecar.tools.is_empty() {
+                ui.add_space(6.0);
+                ui.label(RichText::new("Learned tools").strong());
+                for tool in sidecar.tools {
+                    let status = if tool.kept() { "kept" } else { "provisional" };
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(format!(
+                                "{} = {}. {} ({status}, used {} times)",
+                                tool.name, tool.formula, tool.meaning, tool.uses
+                            ))
+                            .small(),
+                        )
+                        .wrap(),
+                    );
                 }
             }
         });
-    action
+    run
 }
 
 fn draw_report(ui: &mut egui::Ui, report: &str) {
@@ -479,9 +567,7 @@ fn draw_report(ui: &mut egui::Ui, report: &str) {
             ui.add(egui::Label::new(RichText::new(rest).small()).wrap());
             continue;
         }
-        let header =
-            line.chars().any(|ch| ch.is_uppercase()) && !line.chars().any(|ch| ch.is_lowercase());
-        if header || line.starts_with("RunForge comparison report") {
+        if is_heading(line) {
             ui.label(RichText::new(line).strong());
             continue;
         }
