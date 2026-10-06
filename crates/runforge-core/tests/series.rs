@@ -453,3 +453,19 @@ fn two_experiments_with_one_recipe_and_one_seed_are_not_the_same_runs() {
         fs::remove_dir_all(dir).unwrap();
     }
 }
+
+/// The sample folders shipped in `samples/` load in full and make a report.
+#[test]
+fn shipped_samples_load_and_report() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples");
+    for (folder, runs) in [("arc-b2", 5), ("arc-v1", 5)] {
+        let board = load_series_folder(&root.join(folder)).unwrap();
+        assert_eq!(board.series.len(), runs, "{folder}");
+        assert_eq!(board.skipped, 0, "{folder}");
+        assert!(
+            board.series.iter().all(|s| !s.samples.is_empty()),
+            "{folder}"
+        );
+        assert!(!comparison_report(&board, None).is_empty(), "{folder}");
+    }
+}
