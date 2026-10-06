@@ -3,9 +3,10 @@
 use eframe::egui::{self, Color32, RichText, Stroke};
 use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, Reading, Sample, SeriesRead, Weighing, band_segments, comparison_report, epoch_floor,
-    format_measure, loss_segments, low_band, orientation_allowed, orientation_omission,
-    recipe_keys, recipe_label, recipe_marks, recipe_text, spikes_above, utc_date, weigh,
+    Board, Ledger, Reading, Sample, SeriesRead, Weighing, band_segments, comparison_report_with,
+    epoch_floor, format_measure, is_heading, loss_segments, low_band, orientation_allowed,
+    orientation_omission, recipe_keys, recipe_label, recipe_marks, recipe_text, spikes_above,
+    utc_date, weigh,
 };
 
 pub enum InstrumentAction {
@@ -20,7 +21,8 @@ pub struct SidecarView<'a> {
     pub status: &'a str,
     pub answer: &'a str,
     pub can_ask: bool,
-    pub earlier: &'a [String],
+    /// Earlier weighings of these runs, this recipe, or this method.
+    pub ledger: &'a Ledger,
     pub blocked: bool,
 }
 
@@ -52,7 +54,7 @@ pub fn draw_instrument(
 ) -> InstrumentAction {
     let dark = ui.visuals().dark_mode;
     let weighing = weigh(board);
-    let report = comparison_report(board, report_date().as_deref());
+    let report = comparison_report_with(board, report_date().as_deref(), sidecar.ledger);
     let omission = orientation_omission(board);
     let mut action = InstrumentAction::None;
     egui::Panel::right("sidecar")
@@ -458,13 +460,6 @@ fn draw_sidecar(
                         }
                     });
             }
-            if !sidecar.earlier.is_empty() {
-                ui.add_space(8.0);
-                ui.label(RichText::new("Earlier readings").strong());
-                for note in sidecar.earlier {
-                    ui.add(egui::Label::new(RichText::new(plain_note(note)).small()).wrap());
-                }
-            }
         });
     action
 }
@@ -479,9 +474,7 @@ fn draw_report(ui: &mut egui::Ui, report: &str) {
             ui.add(egui::Label::new(RichText::new(rest).small()).wrap());
             continue;
         }
-        let header =
-            line.chars().any(|ch| ch.is_uppercase()) && !line.chars().any(|ch| ch.is_lowercase());
-        if header || line.starts_with("RunForge comparison report") {
+        if is_heading(line) {
             ui.label(RichText::new(line).strong());
             continue;
         }

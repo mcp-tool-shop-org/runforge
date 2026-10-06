@@ -27,7 +27,7 @@ The binary is the window: `eframe` 0.36, `egui_plot` 0.37, `rfd` 0.15. `anyhow` 
 
 A history folder draws the list, the chart, compare, and export. It does not recompute the curve. The caption stays "The chart is the stored samples, in file order."
 
-A series folder draws every sample, the shared recipe, the low row, and the report. The report is generated again from the measurements. It is not a paraphrase stored beside them. Ask, when you press it, talks only to a local Ollama on `127.0.0.1` port `11434`, on a background thread. A cloud-tagged name is dropped. The question carries no digit from the measurements and no folder path. A note that fails the fence is not written into the memory file.
+A series folder draws every sample, the shared recipe, the low row, and the report. The report is generated again from the measurements. It is not a paraphrase stored beside them. Ask, when you press it, talks only to a local Ollama on `127.0.0.1` port `11434`, on a background thread. A cloud-tagged name is dropped. The question carries no digit from the measurements and no folder path. A note that fails the fence is not written into the memory file. The same file keeps the measured weighing of each opened series, which later reports read for their "Earlier weighings" part.
 
 The launcher is a separate path, used only by Train, Eval, and Export model. It walks `PATH` for an absolute `backprop.exe`, `backprop.com`, or extensionless `backprop`, and it skips `.cmd` and `.bat`. The walk does not block the window. A click waits for the last finished answer instead of reporting the tool missing early.
 

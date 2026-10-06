@@ -18,6 +18,8 @@ pub struct Card {
     pub finding: &'static str,
     pub cite: &'static str,
     pub url: &'static str,
+    /// The one kind of sentence this card may back in a report.
+    pub supports: &'static str,
 }
 
 /// What the samples support, plus the reference cards for the knobs present.
@@ -37,12 +39,69 @@ pub struct Neighborhood {
     pub at: f64,
     pub count: usize,
     pub median: f64,
+    /// The first and third quartiles of the same window: the middle half of its samples.
+    pub q1: f64,
+    pub q3: f64,
     pub next: Option<f64>,
     pub lr: Option<f64>,
     pub lr_max: Option<f64>,
 }
 
+/// How far apart the runs' window middles are, against the spread inside each window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Separation {
+    /// The middles sit closer together than the narrowest middle half of any window.
+    InsideNoise,
+    /// Wider than the narrowest window's middle half, narrower than the widest.
+    Partial,
+    /// The middles sit farther apart than the widest middle half of any window.
+    Apart,
+}
+
+/// The gap between the highest and lowest window middle, and the narrowest and widest middle half.
+pub struct Spread {
+    pub gap: f64,
+    pub narrowest: f64,
+    pub widest: f64,
+    pub separation: Separation,
+}
+
+/// Measured over two or more neighborhoods. `None` for fewer.
+pub fn spread(nears: &[Neighborhood]) -> Option<Spread> {
+    if nears.len() < 2 {
+        return None;
+    }
+    let medians = nears.iter().map(|near| near.median);
+    let high = medians.clone().fold(f64::NEG_INFINITY, f64::max);
+    let low = medians.fold(f64::INFINITY, f64::min);
+    let widths = nears.iter().map(Neighborhood::middle_half);
+    let narrowest = widths.clone().fold(f64::INFINITY, f64::min);
+    let widest = widths.fold(f64::NEG_INFINITY, f64::max);
+    let gap = high - low;
+    if !gap.is_finite() || !narrowest.is_finite() || !widest.is_finite() {
+        return None;
+    }
+    let separation = if gap < narrowest {
+        Separation::InsideNoise
+    } else if gap > widest {
+        Separation::Apart
+    } else {
+        Separation::Partial
+    };
+    Some(Spread {
+        gap,
+        narrowest,
+        widest,
+        separation,
+    })
+}
+
 impl Neighborhood {
+    /// Width of the middle half of the window, third quartile minus first.
+    pub fn middle_half(&self) -> f64 {
+        self.q3 - self.q1
+    }
+
     /// The next sample in the window is more than twice this low.
     pub fn lone_low(&self) -> bool {
         self.next
@@ -64,6 +123,7 @@ impl Neighborhood {
 const CATALOG: &[Card] = &[
     Card {
         key: "seed",
+        supports: "Why runs of one recipe with different seeds are compared.",
         formula: "Same recipe, different seed.",
         finding: "Weight initialization and data order each move fine-tuning results by as much as a hyperparameter change. A single extreme sample is a weak summary of that spread.",
         cite: "Dodge, Ilharco, Schwartz, Farhadi, Hajishirzi, and Smith, 2020, Fine-Tuning Pretrained Language Models.",
@@ -71,6 +131,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "lora_r",
+        supports: "LoRA scale is alpha divided by rank.",
         formula: "LoRA scale = alpha / r.",
         finding: "The low-rank update is scaled by alpha/r. With Adam, tuning alpha is roughly tuning the learning rate when the initialization is scaled. Rank and alpha were a pair, not two independent results.",
         cite: "Hu, Shen, Wallis, Allen-Zhu, Li, Wang, Wang, and Chen, 2021, LoRA.",
@@ -78,6 +139,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "learning_rate",
+        supports: "The batch rule, named only where it was not applied.",
         formula: "When the batch is multiplied by k, multiply the learning rate by k.",
         finding: "The linear scaling rule kept ImageNet accuracy as the minibatch grew, with a warmup. It applies when the batch changes. It is not applied when the batch is shared.",
         cite: "Goyal, Dollár, Girshick, Noordhuis, Wesolowski, Kyrola, Tulloch, Jia, and He, 2017, Accurate, Large Minibatch SGD.",
@@ -85,6 +147,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "lr_scheduler",
+        supports: "A cosine schedule lowers the learning rate inside the run.",
         formula: "Cosine annealing decays the learning rate inside the run.",
         finding: "A cosine schedule spends the late epochs at a small learning rate. A low that appears there is not evidence about the learning rate at the start of the run.",
         cite: "Loshchilov and Hutter, 2017, SGDR.",
@@ -92,6 +155,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "weight_decay",
+        supports: "Decoupled weight decay, for Adam-style optimizers.",
         formula: "Decoupled weight decay is applied to the weights, not inside the adaptive step.",
         finding: "For Adam, L2 on the gradient is not weight decay. The decay strength is its own knob, and it was easy to confuse with the learning rate before it was decoupled.",
         cite: "Loshchilov and Hutter, 2019, Decoupled Weight Decay Regularization.",
@@ -99,6 +163,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "max_grad_norm",
+        supports: "Clipping by the gradient norm.",
         formula: "Clip the gradient when its norm exceeds the threshold.",
         finding: "Global-norm clipping limits a step without rescaling every small gradient. The threshold was not a result unless the runs used different thresholds.",
         cite: "Pascanu, Mikolov, and Bengio, 2013, On the difficulty of training recurrent neural networks.",
@@ -106,6 +171,7 @@ const CATALOG: &[Card] = &[
     },
     Card {
         key: "lora_dropout",
+        supports: "Dropout inside the low-rank update.",
         formula: "Dropout inside the low-rank update.",
         finding: "Dropout limits co-adaptation by dropping units during training. On a LoRA update it regularizes the small matrices. It was not measured unless dropout changed.",
         cite: "Srivastava, Hinton, Krizhevsky, Sutskever, and Salakhutdinov, 2014, Dropout.",
@@ -136,6 +202,8 @@ struct Near {
     at: f64,
     count: usize,
     median: f64,
+    q1: f64,
+    q3: f64,
     next: Option<f64>,
     lr: Option<f64>,
     lr_max: Option<f64>,
@@ -176,6 +244,8 @@ fn publish(near: &Near) -> Neighborhood {
         at: near.at,
         count: near.count,
         median: near.median,
+        q1: near.q1,
+        q3: near.q3,
         next: near.next,
         lr: near.lr,
         lr_max: near.lr_max,
@@ -239,6 +309,8 @@ fn near_low(series: &Series) -> Option<Near> {
         }
     }
     let median = median(&mut losses)?;
+    let q1 = quantile(&losses, 0.25)?;
+    let q3 = quantile(&losses, 0.75)?;
     let next = others
         .iter()
         .copied()
@@ -256,6 +328,8 @@ fn near_low(series: &Series) -> Option<Near> {
         at,
         count: losses.len(),
         median,
+        q1,
+        q3,
         next,
         lr,
         lr_max,
@@ -436,6 +510,18 @@ fn shared_number(board: &Board, key: &str) -> Option<f64> {
         .get(key)
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
+}
+
+/// Linear interpolation between the closest ranks of sorted `values`.
+fn quantile(sorted: &[f64], p: f64) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let rank = p * (sorted.len() - 1) as f64;
+    let below = rank.floor() as usize;
+    let above = rank.ceil() as usize;
+    let fraction = rank - below as f64;
+    Some(sorted[below] + (sorted[above] - sorted[below]) * fraction)
 }
 
 fn median(values: &mut [f64]) -> Option<f64> {

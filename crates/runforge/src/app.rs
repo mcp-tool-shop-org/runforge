@@ -10,11 +10,11 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, EvalSummary, History, HistoryError, HyperDiff, LossSample, Prefs, Reading, RunEntry,
-    Theme, VERSION, comparison_report, curve_csv, curve_segments, earlier_readings, entry_json,
-    finite_points, format_f64, hyperparameter_diffs, list_csv, load_folder, load_series_folder,
-    orientation_allowed, read_board, read_prefs, recall, remember, report_file_name,
-    sidecar_prompt, write_prefs,
+    Board, EvalSummary, History, HistoryError, HyperDiff, Ledger, LossSample, Prefs, Reading,
+    RunEntry, Theme, VERSION, comparison_report_with, curve_csv, curve_segments, earlier_readings,
+    entry_json, finite_points, format_f64, hyperparameter_diffs, ledger_for, list_csv, load_folder,
+    load_series_folder, orientation_allowed, read_board, read_prefs, recall, record_weighing,
+    remember, report_file_name, sidecar_prompt, weighed_now, write_prefs,
 };
 
 use crate::instrument::{InstrumentAction, SidecarView, draw_instrument, report_date};
@@ -81,6 +81,8 @@ pub struct RunForgeApp {
     reading: Option<Reading>,
     memory_line: String,
     earlier: Vec<String>,
+    /// Earlier weighings that bear on the open series, read before it was recorded.
+    ledger: Ledger,
     sidecar_status: String,
     sidecar_answer: String,
     /// A fresh orientation note crossed the fence. A recalled note does not set this.
@@ -120,6 +122,7 @@ impl RunForgeApp {
             reading: None,
             memory_line: String::new(),
             earlier: Vec::new(),
+            ledger: Ledger::default(),
             sidecar_status: String::new(),
             sidecar_answer: String::new(),
             orientation_blocked: false,
@@ -178,6 +181,7 @@ impl RunForgeApp {
         self.reading = None;
         self.memory_line.clear();
         self.earlier.clear();
+        self.ledger = Ledger::default();
         self.sidecar_status.clear();
         self.sidecar_answer.clear();
         self.orientation_blocked = false;
@@ -199,6 +203,11 @@ impl RunForgeApp {
                     }
                 }
                 self.earlier = earlier_readings(&self.prefs_dir, &board);
+                self.ledger = ledger_for(&self.prefs_dir, &board);
+                let today = report_date().unwrap_or_default();
+                if let Err(error) = record_weighing(&self.prefs_dir, &weighed_now(&board, &today)) {
+                    self.note = format!("could not keep the weighing: {error}");
+                }
                 self.history = None;
                 self.selected = None;
                 self.compare = None;
@@ -234,7 +243,7 @@ impl RunForgeApp {
                 status: &self.sidecar_status,
                 answer: &self.sidecar_answer,
                 can_ask: self.ask.is_none(),
-                earlier: &self.earlier,
+                ledger: &self.ledger,
                 blocked: self.orientation_blocked,
             };
             draw_instrument(ui, &board, &reading, &view, self.focus.as_deref())
@@ -249,7 +258,7 @@ impl RunForgeApp {
             InstrumentAction::SaveReport => {
                 let date = report_date();
                 let name = report_file_name(&board, date.as_deref());
-                let text = comparison_report(&board, date.as_deref());
+                let text = comparison_report_with(&board, date.as_deref(), &self.ledger);
                 self.save_text(&name, &text);
             }
             InstrumentAction::Focus(name) => {
@@ -2013,7 +2022,8 @@ mod tests {
                 .any(|text| text.contains("lowest sample in each epoch"))
         );
         assert!(texts.iter().all(|text| text != "Train"));
-        assert!(texts.iter().any(|text| text.contains("Half an epoch")));
+        assert!(texts.iter().any(|text| text.contains("half epoch")));
+        assert!(texts.iter().all(|text| !text.contains("Earlier weighings")));
         assert!(texts.iter().any(|text| text.contains("Reference")));
         assert!(texts.iter().any(|text| text.contains("Save report")));
         assert!(texts.iter().any(|text| text.contains("no second run")));
@@ -2034,6 +2044,9 @@ mod tests {
                 .iter()
                 .any(|text| text.contains("neighborhood refuses the crown"))
         );
+        // The model note and the weighing share one memory file; neither erased the other.
+        assert!(texts.iter().any(|text| text == "Earlier weighings"));
+        assert!(texts.iter().any(|text| text.contains("first weighed on")));
         output.drop_without_applying_deltas();
         std::fs::remove_dir_all(&dir).unwrap();
     }

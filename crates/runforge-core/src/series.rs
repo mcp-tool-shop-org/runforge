@@ -692,8 +692,31 @@ pub fn remember(directory: &Path, board: &Board, text: &str) -> Result<(), std::
         },
     );
     notes.truncate(20);
+    let mut memory = read_memory(directory);
+    memory.insert("notes".to_string(), notes_value(&notes));
+    write_memory(directory, &memory)
+}
+
+/// The memory file as one object. Each part (notes, weighings) keeps its own key.
+pub(crate) fn read_memory(directory: &Path) -> Map<String, Value> {
+    fs::read(directory.join(MEMORY_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .and_then(|value| match value {
+            Value::Object(object) => Some(object),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+/// Write the whole memory object back. A part this call did not change is kept.
+pub(crate) fn write_memory(
+    directory: &Path,
+    memory: &Map<String, Value>,
+) -> Result<(), std::io::Error> {
     fs::create_dir_all(directory)?;
-    let body = serde_json::to_string_pretty(&notes_value(&notes)).expect("notes should serialize");
+    let body = serde_json::to_string_pretty(&Value::Object(memory.clone()))
+        .expect("memory should serialize");
     fs::write(directory.join(MEMORY_FILE), body + "\n")
 }
 
@@ -751,33 +774,25 @@ struct Note {
 }
 
 fn notes_value(notes: &[Note]) -> Value {
-    Value::Object(Map::from_iter([(
-        "notes".to_string(),
-        Value::Array(
-            notes
-                .iter()
-                .map(|note| {
-                    Value::Object(Map::from_iter([
-                        (
-                            "fingerprint".to_string(),
-                            Value::String(note.fingerprint.clone()),
-                        ),
-                        ("text".to_string(), Value::String(note.text.clone())),
-                    ]))
-                })
-                .collect(),
-        ),
-    )]))
+    Value::Array(
+        notes
+            .iter()
+            .map(|note| {
+                Value::Object(Map::from_iter([
+                    (
+                        "fingerprint".to_string(),
+                        Value::String(note.fingerprint.clone()),
+                    ),
+                    ("text".to_string(), Value::String(note.text.clone())),
+                ]))
+            })
+            .collect(),
+    )
 }
 
 fn read_notes(directory: &Path) -> Vec<Note> {
-    let Ok(bytes) = fs::read(directory.join(MEMORY_FILE)) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
-        return Vec::new();
-    };
-    let Some(items) = value.get("notes").and_then(Value::as_array) else {
+    let memory = read_memory(directory);
+    let Some(items) = memory.get("notes").and_then(Value::as_array) else {
         return Vec::new();
     };
     items

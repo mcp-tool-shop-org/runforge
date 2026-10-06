@@ -7,6 +7,7 @@
 mod error;
 mod export;
 mod history;
+mod ledger;
 mod parse;
 mod prefs;
 mod report;
@@ -20,16 +21,17 @@ pub use history::{
     EvalSummary, History, HyperDiff, LossSample, RunEntry, hyperparameter_diffs, load_bytes,
     load_folder, load_text, pick_best_loss,
 };
+pub use ledger::{Ledger, RunMark, Weighed, ledger_for, record_weighing, weighed_now};
 pub use prefs::{PREFS_FILE, Prefs, Theme, choose_prefs_dir, read_prefs, write_prefs};
 pub use report::{
-    ORIENTATION_OMITTED, comparison_report, orientation_allowed, orientation_omission,
-    report_file_name, utc_date,
+    ORIENTATION_OMITTED, comparison_report, comparison_report_with, is_heading,
+    orientation_allowed, orientation_omission, report_file_name, utc_date,
 };
 pub use series::{
     Board, Mark, Reading, Sample, Series, SeriesRead, band_segments, earlier_readings, epoch_floor,
     fingerprint, format_measure, load_series_folder, loss_segments, low_band, read_board, recall,
     recipe_keys, recipe_label, recipe_marks, recipe_text, remember, sidecar_prompt, spikes_above,
 };
-pub use weigh::{Card, Neighborhood, Weighing, weigh};
+pub use weigh::{Card, Neighborhood, Separation, Spread, Weighing, spread, weigh};
 
 pub const VERSION: &str = "2.0.0";
