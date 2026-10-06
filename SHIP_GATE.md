@@ -17,7 +17,7 @@
 ### Default safety posture
 
 - [ ] `[cli|mcp|desktop]` SKIP: Train, Eval, Export model, and Stop run only from those buttons. There is no `--allow-*` flag surface.
-- [x] `[cli|mcp|desktop]` File operations constrained to known directories (2026-10-05, history is the opened folder or `output` one level down; export and the data file are paths the user picks; the app does not walk the disk)
+- [x] `[cli|mcp|desktop]` File operations constrained to known directories (2026-10-06, history is the opened folder or `output` one level down; a series folder is that folder and its immediate children; export and the data file are paths the user picks; the app does not walk the disk)
 - [ ] `[mcp]` SKIP: not an MCP server
 - [ ] `[mcp]` SKIP: not an MCP server
 
@@ -33,7 +33,7 @@
 
 ## C. Operator Docs
 
-- [x] `[all]` README is current: what it does, install, usage, supported platforms + runtime versions (2026-10-05, Windows bench, Rust 1.98.1)
+- [x] `[all]` README is current: what it does, install, usage, supported platforms + runtime versions (2026-10-06, Windows instrument and the history bench, Rust 1.98.1)
 - [x] `[all]` CHANGELOG.md (Keep a Changelog format) (2026-10-05, 2.0.0 is the crate version and is not a git tag)
 - [x] `[all]` LICENSE file present and repo states support status (2026-10-05, MIT; SECURITY.md supports the 2.0.0 source build; the Store listing is still the 1.0.1 classifier)
 - [ ] `[cli]` SKIP: not a CLI
@@ -58,8 +58,8 @@
 ## E. Identity (soft gate — does not block ship)
 
 - [x] `[all]` Logo in README header (2026-10-05, brand wordmark, width 720, and the dark-window screenshot)
-- [x] `[all]` Translations (polyglot-mcp, 8 languages) (2026-10-05, local TranslateGemma 27B, 7/7 plus the English source, nav bar injected, Japanese reads as Japanese)
-- [x] `[org]` Landing page (@mcptoolshop/site-theme) (2026-10-05, site-theme 2.2.0, base `/runforge`, cyan accent, build wrote `dist/index.html`, `dist/handbook/index.html`, and `dist/pagefind/pagefind.js`. The Pages URL follows the push.)
+- [x] `[all]` Translations (polyglot-mcp, 8 languages) (2026-10-06, local TranslateGemma 27B, 7/7 plus the English source, nav bar injected, Japanese reads as Japanese)
+- [x] `[org]` Landing page (@mcptoolshop/site-theme) (2026-10-06, base `/runforge`, cyan accent, build wrote `dist/index.html`, `dist/handbook/index.html`, and `dist/pagefind/pagefind.js`. The Pages URL follows the push.)
 - [x] `[all]` GitHub repo metadata: description, homepage, topics (2026-10-05, description and homepage set, topics rust, windows, egui, machine-learning, desktop)
 
 ---

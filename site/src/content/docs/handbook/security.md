@@ -14,12 +14,14 @@ Report a vulnerability privately through [GitHub Security Advisories](https://gi
 | Boundary | What happens |
 | --- | --- |
 | Run history | `run_history.json` in the folder you open, or `output/run_history.json` one level down. No disk walk. No merge. |
+| A series folder | `run-config*.json` in that folder and in its immediate children. One bad file is skipped. The series files are not rewritten. |
 | Export and the data file | Paths you pick. The history file is not rewritten. |
 | Preferences | Last folder and theme. Packaged LocalState, otherwise beside the executable, otherwise the process temporary directory. |
 | Train, Eval, Export model | An already-installed `backprop`, arguments built by the app, no shell, no copy of the environment. |
 | Stop | The process tree this window started. If kill-on-close cannot be assigned, the process is not resumed. |
 | The log | The child program's output, shown in the window. It is not sent anywhere. |
-| Network | No model download, no install of backpropagate, no telemetry, no account. |
+| The local model | Ask connects to `127.0.0.1` port `11434`. A cloud-tagged name is not chosen. The question does not include the folder path. A kept note stays with the preferences. |
+| Network | The manifest does not request `internetClient`. No model download, no install of backpropagate, no telemetry, no account. The report's reference list is inside the program. |
 
 The manifest for the unsigned package asks only for `runFullTrust`, so a packaged run can read a folder you pick anywhere on the machine. It does not ask for `internetClient`.
 

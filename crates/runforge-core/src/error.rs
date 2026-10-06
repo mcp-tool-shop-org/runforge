@@ -12,4 +12,6 @@ pub enum HistoryError {
     Parse(String),
     #[error("run history must be a JSON array")]
     NotArray,
+    #[error("no run-config series in this folder")]
+    NoSeries,
 }

@@ -2722,6 +2722,7 @@ dependencies = [
  "egui_plot",
  "rfd",
  "runforge-core",
+ "serde_json",
 ]
 
 [[package]]

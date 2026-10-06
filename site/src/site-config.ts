@@ -3,7 +3,7 @@ import type { SiteConfig } from '@mcptoolshop/site-theme';
 export const config: SiteConfig = {
   title: 'RunForge',
   description:
-    'Windows bench for a backpropagate output folder. It lists the runs, draws the stored loss, and can start an already-installed backprop. It does not contain the trainer.',
+    'Windows instrument for a training record. A series folder draws every sample and a plain-text report. A backpropagate folder opens the history bench. It does not contain the trainer.',
   logoBadge: 'RF',
   brandName: 'RunForge',
   repoUrl: 'https://github.com/mcp-tool-shop-org/runforge',
@@ -12,10 +12,10 @@ export const config: SiteConfig = {
 
   hero: {
     badge: 'Windows · source build 2.0.0',
-    headline: 'The bench for a run folder',
+    headline: 'Read the run, then weigh it',
     headlineAccent: 'not the trainer.',
     description:
-      'Open the folder that holds <code>run_history.json</code>. RunForge lists the runs, draws the stored loss, and compares two rows. Train, Eval, and Export model start <code>backprop</code> only when that program is already on PATH. This app does not download a model and does not ship PyTorch.',
+      'Open one folder. A series folder draws every stored sample, the shared recipe, and a report written from those measurements. A backpropagate folder opens the history bench. Train starts <code>backprop</code> only when that program is already on PATH, and only from that bench. This app does not download a model and does not ship PyTorch.',
     primaryCta: { href: '#commands', label: 'See the commands' },
     secondaryCta: { href: 'handbook/', label: 'Read the Handbook' },
     previews: [
@@ -37,9 +37,29 @@ export const config: SiteConfig = {
   sections: [
     {
       kind: 'features',
+      id: 'series',
+      title: 'A series folder',
+      subtitle: 'Every sample stays. The report is the same words in the pane and in the file.',
+      features: [
+        {
+          title: 'The samples, unflattened',
+          desc: 'run-config files in the folder you open, and one level down. Every finite sample is drawn. A gap stays a gap. final_loss is a marker beside the curve, not a point on it.',
+        },
+        {
+          title: 'One report',
+          desc: 'The sidecar prints the weighing as plain text. Save report writes that string. The lowest sample stays on the page. When the deepest point and the calmest neighborhood disagree, the report says there is no winner.',
+        },
+        {
+          title: 'A local note, fenced',
+          desc: 'Ask talks to a local model on the loopback address. It does not press Train and it does not call a cloud model. A note with a digit, a setting, or a verdict is dropped, and the pane says so.',
+        },
+      ],
+    },
+    {
+      kind: 'features',
       id: 'bench',
-      title: 'What the window does',
-      subtitle: 'One folder. The history file in it. The curve the trainer already stored.',
+      title: 'The history bench',
+      subtitle: 'One backpropagate folder. The history file in it. The curve the trainer already stored.',
       features: [
         {
           title: 'The file you opened',
@@ -64,8 +84,10 @@ export const config: SiteConfig = {
       columns: ['', 'RunForge', 'Not in this app'],
       rows: [
         ['History', 'The folder you pick', 'A search of the disk'],
+        ['Series', 'run-config files, one level down', 'A resampled curve, or a rank by final_loss'],
+        ['Report', 'The measurements, saved as the same words', 'A cloud model, or a fetched paper'],
         ['Curve', 'Stored loss_history', 'final_loss appended as a point'],
-        ['Train, Eval, Export model', 'backprop already on PATH', 'A copy of the trainer, Python, or PyTorch'],
+        ['Train, Eval, Export model', 'backprop already on PATH, on the history bench', 'A copy of the trainer, Python, or PyTorch'],
         ['Stop', 'The process tree this window started', 'A cancel protocol inside backpropagate'],
         ['Store', 'Same product, source build 2.0.0', 'A submitted 2.0 package'],
       ],

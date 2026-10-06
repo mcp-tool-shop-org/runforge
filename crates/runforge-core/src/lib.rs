@@ -1,6 +1,7 @@
-//! The bench's reading of a backpropagate `run_history.json`.
+//! What RunForge reads.
 //!
-//! The library does not train, spawn a process, or open a window.
+//! A backpropagate `run_history.json`, or a folder of run-config series.
+//! The library does not train, spawn a process, open a window, or call a model.
 //! A bad file is a [`HistoryError`]. It is not a panic.
 
 mod error;
@@ -8,7 +9,10 @@ mod export;
 mod history;
 mod parse;
 mod prefs;
+mod report;
+mod series;
 mod time;
+mod weigh;
 
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
@@ -17,5 +21,15 @@ pub use history::{
     load_folder, load_text, pick_best_loss,
 };
 pub use prefs::{PREFS_FILE, Prefs, Theme, choose_prefs_dir, read_prefs, write_prefs};
+pub use report::{
+    ORIENTATION_OMITTED, comparison_report, orientation_allowed, orientation_omission,
+    report_file_name, utc_date,
+};
+pub use series::{
+    Board, Mark, Reading, Sample, Series, SeriesRead, band_segments, earlier_readings, epoch_floor,
+    fingerprint, format_measure, load_series_folder, loss_segments, low_band, read_board, recall,
+    recipe_keys, recipe_label, recipe_marks, recipe_text, remember, sidecar_prompt, spikes_above,
+};
+pub use weigh::{Card, Neighborhood, Weighing, weigh};
 
 pub const VERSION: &str = "2.0.0";

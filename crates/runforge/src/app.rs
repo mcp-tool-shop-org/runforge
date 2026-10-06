@@ -1,24 +1,29 @@
-//! The window. It draws what `runforge-core` already decided.
+//! The window. A history folder is the bench. A series folder is the instrument.
 //!
 //! Train, Eval, and Export model start an already-installed `backprop`. The trainer is not in
 //! this package.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use runforge_core::{
-    EvalSummary, History, HyperDiff, LossSample, Prefs, RunEntry, Theme, VERSION, curve_csv,
-    curve_segments, entry_json, finite_points, format_f64, hyperparameter_diffs, list_csv,
-    load_folder, read_prefs, write_prefs,
+    Board, EvalSummary, History, HistoryError, HyperDiff, LossSample, Prefs, Reading, RunEntry,
+    Theme, VERSION, comparison_report, curve_csv, curve_segments, earlier_readings, entry_json,
+    finite_points, format_f64, hyperparameter_diffs, list_csv, load_folder, load_series_folder,
+    orientation_allowed, read_board, read_prefs, recall, remember, report_file_name,
+    sidecar_prompt, write_prefs,
 };
 
+use crate::instrument::{InstrumentAction, SidecarView, draw_instrument, report_date};
 use crate::launch::{
     ALREADY_RUNNING, LaunchRequest, MISSING_TOOL, NEED_DATA, NO_CHECKPOINT, NOTHING_RUNNING,
     OPEN_FOLDER, SELECT_RUN, Session, ToolAnswer, apply_log_update, bust_tool_cache, eval_args,
     exit_note, export_args, start_installed, tool_answer, train_args,
 };
+use crate::sidecar::{SidecarReply, start_ask};
 
 struct Ink {
     note: Color32,
@@ -72,6 +77,16 @@ pub struct RunForgeApp {
     prefs_dir: PathBuf,
     prefs: Prefs,
     history: Option<History>,
+    series: Option<Board>,
+    reading: Option<Reading>,
+    memory_line: String,
+    earlier: Vec<String>,
+    sidecar_status: String,
+    sidecar_answer: String,
+    /// A fresh orientation note crossed the fence. A recalled note does not set this.
+    orientation_blocked: bool,
+    ask: Option<Receiver<SidecarReply>>,
+    focus: Option<String>,
     opened_file: Option<PathBuf>,
     note: String,
     selected: Option<usize>,
@@ -101,6 +116,15 @@ impl RunForgeApp {
             prefs_dir,
             prefs,
             history: None,
+            series: None,
+            reading: None,
+            memory_line: String::new(),
+            earlier: Vec::new(),
+            sidecar_status: String::new(),
+            sidecar_answer: String::new(),
+            orientation_blocked: false,
+            ask: None,
+            focus: None,
             opened_file: None,
             note: String::new(),
             selected: None,
@@ -128,6 +152,7 @@ impl RunForgeApp {
     fn load_folder(&mut self, folder: PathBuf) {
         match load_folder(&folder) {
             Ok((path, history)) => {
+                self.clear_series();
                 self.note.clear();
                 self.opened_file = Some(path);
                 self.selected = history
@@ -141,8 +166,141 @@ impl RunForgeApp {
                     self.note = format!("could not save preferences: {error}");
                 }
             }
+            Err(HistoryError::NotFound) => self.load_series(folder),
             Err(error) => {
                 self.note = error.to_string();
+            }
+        }
+    }
+
+    fn clear_series(&mut self) {
+        self.series = None;
+        self.reading = None;
+        self.memory_line.clear();
+        self.earlier.clear();
+        self.sidecar_status.clear();
+        self.sidecar_answer.clear();
+        self.orientation_blocked = false;
+        self.ask = None;
+        self.focus = None;
+    }
+
+    fn load_series(&mut self, folder: PathBuf) {
+        match load_series_folder(&folder) {
+            Ok(board) => {
+                let reading = read_board(&board);
+                self.memory_line = recall(&self.prefs_dir, &board).unwrap_or_default();
+                if self.memory_line.is_empty() {
+                    let bare = reading.lines().join("\n");
+                    if let Err(error) = remember(&self.prefs_dir, &board, &bare) {
+                        self.note = format!("could not remember the reading: {error}");
+                    } else {
+                        self.memory_line = bare;
+                    }
+                }
+                self.earlier = earlier_readings(&self.prefs_dir, &board);
+                self.history = None;
+                self.selected = None;
+                self.compare = None;
+                self.sidecar_status.clear();
+                self.sidecar_answer.clear();
+                self.orientation_blocked = false;
+                self.ask = None;
+                self.focus = None;
+                self.opened_file = Some(folder.clone());
+                self.reading = Some(reading);
+                self.series = Some(board);
+                self.prefs.set_folder(&folder);
+                if let Err(error) = write_prefs(&self.prefs_dir, &self.prefs) {
+                    self.note = format!("could not save preferences: {error}");
+                }
+            }
+            Err(error) => {
+                self.note = format!("no run_history.json in this folder, and {error}");
+            }
+        }
+    }
+
+    fn instrument(&mut self, ui: &mut egui::Ui) {
+        self.poll_sidecar();
+        let board = self.series.clone();
+        let reading = self.reading.clone();
+        let (Some(board), Some(reading)) = (board, reading) else {
+            return;
+        };
+        let action = {
+            let view = SidecarView {
+                memory: &self.memory_line,
+                status: &self.sidecar_status,
+                answer: &self.sidecar_answer,
+                can_ask: self.ask.is_none(),
+                earlier: &self.earlier,
+                blocked: self.orientation_blocked,
+            };
+            draw_instrument(ui, &board, &reading, &view, self.focus.as_deref())
+        };
+        match action {
+            InstrumentAction::Ask => {
+                self.orientation_blocked = false;
+                self.sidecar_status = "Asking the local model.".to_string();
+                self.sidecar_answer.clear();
+                self.ask = Some(start_ask(sidecar_prompt(&reading, &board, &self.earlier)));
+            }
+            InstrumentAction::SaveReport => {
+                let date = report_date();
+                let name = report_file_name(&board, date.as_deref());
+                let text = comparison_report(&board, date.as_deref());
+                self.save_text(&name, &text);
+            }
+            InstrumentAction::Focus(name) => {
+                if self.focus.as_deref() == Some(name.as_str()) {
+                    self.focus = None;
+                } else {
+                    self.focus = Some(name);
+                }
+            }
+            InstrumentAction::None => {}
+        }
+    }
+
+    fn poll_sidecar(&mut self) {
+        let Some(rx) = &self.ask else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(SidecarReply::Answer { model, text }) => {
+                self.ask = None;
+                if text.trim().is_empty() {
+                    self.sidecar_status.clear();
+                    self.sidecar_answer.clear();
+                    self.orientation_blocked = false;
+                } else if !orientation_allowed(&text) {
+                    self.sidecar_status.clear();
+                    self.sidecar_answer.clear();
+                    self.orientation_blocked = true;
+                } else {
+                    self.orientation_blocked = false;
+                    self.sidecar_status = model.clone();
+                    self.sidecar_answer = text.clone();
+                    if let (Some(board), Some(reading)) = (&self.series, &self.reading) {
+                        let note = format!("{}\n\n{model}: {text}", reading.lines().join("\n"));
+                        if remember(&self.prefs_dir, board, &note).is_ok() {
+                            self.memory_line = note;
+                            self.earlier = earlier_readings(&self.prefs_dir, board);
+                        }
+                    }
+                }
+            }
+            Ok(SidecarReply::Absent(text)) => {
+                self.ask = None;
+                self.sidecar_status = text;
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => {
+                self.ask = None;
+                if self.sidecar_answer.is_empty() {
+                    self.sidecar_status = "The local model did not answer.".to_string();
+                }
             }
         }
     }
@@ -190,14 +348,19 @@ impl eframe::App for RunForgeApp {
             ui.add_space(4.0);
             ui.label(RichText::new(&self.note).color(ink(ui.visuals().dark_mode).note));
         }
-        if self.history.is_none() && self.session.is_none() {
-            ui.add_space(24.0);
-            ui.label("Open the folder where backpropagate wrote run_history.json.");
-        } else {
+        let series_open = self.series.is_some() && self.history.is_none();
+        let bench_open = self.history.is_some() || self.session.is_some();
+        if series_open {
+            self.instrument(ui);
+        } else if bench_open {
             egui::Panel::bottom("log").show(ui, |ui| self.log_panel(ui));
             self.bench(ui);
+        } else {
+            ui.add_space(24.0);
+            ui.label("Open a folder. Backpropagate writes run_history.json. A series folder holds run-config files, in the folder or one level down.");
         }
-        if self.session.is_some() || self.held.is_some() || self.tool_pending {
+        if self.session.is_some() || self.held.is_some() || self.tool_pending || self.ask.is_some()
+        {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(200));
         }
@@ -781,7 +944,7 @@ mod tests {
     };
     use eframe::App;
     use eframe::egui::{self, Event};
-    use runforge_core::{Theme, write_prefs};
+    use runforge_core::{Theme, recall, remember, write_prefs};
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
@@ -1810,5 +1973,94 @@ mod tests {
         output.drop_without_applying_deltas();
         assert!(row_ok);
         assert!(all_inside);
+    }
+
+    #[test]
+    fn a_series_folder_draws_the_instrument() {
+        let dir = scratch("series-ui");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(
+            folder.join("run-config-seed13.json"),
+            r#"{
+                "seed": 13,
+                "model": "Qwen/Qwen2.5-7B-Instruct",
+                "hyperparameters": {"method": "bf16 LoRA", "lora_r": 16, "target_modules": ["q_proj", "v_proj"]},
+                "training_summary": {"final_loss": 0.7},
+                "saturation_log": {"loss_curve": [
+                    {"epoch": 0.0, "loss": 12.0, "lr": 0.0},
+                    {"epoch": 7.0, "loss": 0.02, "lr": 0.0001},
+                    {"epoch": 8.0, "loss": 0.08, "lr": 0.0}
+                ]}
+            }"#,
+        )
+        .unwrap();
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        assert!(app.history.is_none());
+        assert_eq!(app.series.as_ref().map(|board| board.series.len()), Some(1));
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(texts.iter().any(|text| text.contains("seed 13")));
+        assert!(texts.iter().any(|text| text.contains("Sidecar")));
+        assert!(texts.iter().any(|text| text.contains("Every sample")));
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("lowest sample in each epoch"))
+        );
+        assert!(texts.iter().all(|text| text != "Train"));
+        assert!(texts.iter().any(|text| text.contains("Half an epoch")));
+        assert!(texts.iter().any(|text| text.contains("Reference")));
+        assert!(texts.iter().any(|text| text.contains("Save report")));
+        assert!(texts.iter().any(|text| text.contains("no second run")));
+        output.drop_without_applying_deltas();
+        let board = app.series.clone().unwrap();
+        let stored = recall(&app.prefs_dir, &board).unwrap();
+        assert!(stored.contains("seed 13"));
+        assert!(!stored.contains("\n\n"));
+        let rich = format!("{stored}\n\nmodel: neighborhood refuses the crown");
+        remember(&app.prefs_dir, &board, &rich).unwrap();
+        ui.click(&mut app, "Open folder");
+        let kept = recall(&app.prefs_dir, app.series.as_ref().unwrap()).unwrap();
+        assert!(kept.contains("neighborhood refuses the crown"));
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("neighborhood refuses the crown"))
+        );
+        output.drop_without_applying_deltas();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn history_wins_over_a_series_file() {
+        let dir = scratch("history-wins");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        write_history(&folder);
+        std::fs::write(
+            folder.join("run-config-seed13.json"),
+            r#"{"seed":13,"saturation_log":{"loss_curve":[{"epoch":1,"loss":1,"lr":0}]}}"#,
+        )
+        .unwrap();
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        assert!(app.history.is_some());
+        assert!(app.series.is_none());
+        output_drop(&mut ui, &mut app);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn output_drop(ui: &mut Harness, app: &mut RunForgeApp) {
+        ui.show(app, Vec::new()).drop_without_applying_deltas();
     }
 }

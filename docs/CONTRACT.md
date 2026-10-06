@@ -6,7 +6,11 @@ The 1.0.1 classifier app stays in the prototypes archive. This repository does n
 
 ## Product
 
-RunForge is the Windows bench for a backpropagate output folder. It lists the runs, draws the stored loss, compares two entries, and exports the table.
+The sentence that called RunForge only a bench — list the runs, draw the stored loss, compare two entries, export the table — is replaced. Written 2026-10-05. RunForge is the instrument for a training record.
+
+A sample stays a record: the epoch or the step, the loss, the learning rate, and every other field that was logged. A recipe stays a structure and is shown whole. An arm stays whole: a mean does not stand in for the levels, the coverage, or a control that never trained. The sidecar sits in the window. It reads the same records, cites the epoch or step range, and does not press Train. It calls a local model only. It does not call a cloud model. Marketplace submission waits until this instrument is the thing a person opens.
+
+The history bench is still the view for a backpropagate folder. That view lists the runs, draws the stored loss, compares two entries, and exports the table. It is one record kind. It is not the ceiling.
 
 Backpropagate remains the trainer: the Python library, the `backprop` CLI, and its own Store product `9MVXLZVL3TMT` (`mcp-tool-shop.backpropagate`). RunForge does not move into that repo and does not ship under that identity. The RunForge listing `9PHL1HX0CGMF` stays up. This update is how it changes.
 
@@ -31,7 +35,7 @@ The package family name follows those three. Architecture and the version are no
 
 Partner Center already holds `RunForgeDesktop_1.0.0.0_x64.msixupload` and `RunForgeDesktop_1.0.1.0_x64_bundle.msixupload`. The next upload is strictly above `1.0.1.0`. The fourth version part stays `0`, which is the rule recorded in backpropagate's Store handoff on 2026-10-01 and the shape of both uploads already on this product.
 
-The package is unsigned. Partner Center signs it. The unsigned file is not a double-click installer. The manifest asks for `runFullTrust` so the app can read a run folder the user picked anywhere on the machine. The justification is that sentence. The package contains the Rust binary and its licences. It does not contain Python, PyTorch, bun, or backpropagate.
+The package is unsigned. Partner Center signs it. The unsigned file is not a double-click installer. The manifest asks for `runFullTrust` so the app can read a run folder the user picked anywhere on the machine. The justification is that sentence. The manifest does not ask for `internetClient`. The sidecar talks to a local model on the loopback address, and a cloud tag is not a model it may call. The package contains the Rust binary and its licences. It does not contain Python, PyTorch, bun, backpropagate, or a model.
 
 The public title on the listing may read RunForge. The package name stays `RunForge-Desktop`.
 
@@ -45,11 +49,23 @@ The repository is `mcp-tool-shop-org/runforge`. The prototypes tree stays where 
 
 Slice 2's form has four fields: model name, data file, step count, and the open output folder. Every other training flag stays at backpropagate's default. Stop ends the process tree RunForge started. There is no separate backprop cancel protocol in this contract.
 
-**Out of slice 1 and slice 2.** Embedding the trainer. A second sklearn trainer. Editing `run_history.json` in place. Merging two history files. Rendering eval generations. Walking the disk to find histories. Inference deltas. Changing the package identity. Submitting under backpropagate's Store product.
+**The instrument, in this tree.** A series folder opens onto every sample, the shared recipe, and the sidecar. The history bench remains the view when `run_history.json` is the file. The sidecar is in this window. It is not a second product, and it does not press Train.
+
+**Out of slice.** Embedding the trainer. A second sklearn trainer. Editing `run_history.json` in place. Merging two history files. Rendering eval generations. Walking the disk to find histories. ScalarScope's inference deltas. Changing the package identity. Submitting under backpropagate's Store product. Putting a cloud model or an API key in the package.
 
 ## What the app reads
 
-The Open action takes a folder. The file is `run_history.json` in that folder, or `output/run_history.json` one level down. A `multi_run` history is a second file the user can open. Slice 1 does not merge them.
+The Open action takes a folder. One record kind wins. The files are not merged.
+
+**History.** The file is `run_history.json` in that folder, or `output/run_history.json` one level down. The file in the opened folder wins when both exist. A `multi_run` history is a second file the user can open. This reader does not merge them. The parse rules below bind this file.
+
+**Series.** When the history file is absent, RunForge reads `run-config*.json` in the opened folder and the same names one level down in child folders. It does not look further down. It does not search the disk. A file is a series when it is a JSON object and `saturation_log.loss_curve` is an array. Any other file is skipped and counted. One bad file does not hide the rest. A duplicate key inside one file refuses that file.
+
+Each sample keeps its axis (`epoch`, otherwise `step`), `loss`, `lr`, and every other key on that object. A null or non-finite loss is a gap. A gap is not drawn as zero. The chart is every sample, in file order. The view is not resampled. `training_summary.final_loss`, when present, is a separate number on the series. It is not appended to the curve.
+
+The recipe is the `hyperparameters` object. Keys whose parsed values agree across the series are shown once. A key that differs, and the seed, stay on the series they belong to. Target modules stay a set of marks.
+
+**Named, and not drawn by this pane yet.** A style-run log is a step series of loss and learning rate, grouped by the lever named in the file. A caliper file is a second measurement on the same steps: geometry, uncertainty, and performance. That loss is not the train-log loss. The two series stay aligned on step and are not merged. An arm is a control kept whole: pass at one, pass at k, coverage beside the mean, and the per-level table. A healthy average does not hide a dead arm. Those records are part of the instrument. This pane does not read them yet.
 
 The file is a JSON array. Backpropagate writes it from `RunHistoryManager` (`backpropagate/checkpoints.py`). `MAX_LOSS_HISTORY_POINTS` is 100. Entries are updated in place by `run_id`. `evaluate_run` merges `extra={"eval": ...}` onto the entry, so the on-disk key is `eval`.
 
@@ -99,11 +115,22 @@ These come from the studio rust-knowledge base, rustc 1.98.1, edition 2024, ledg
 
 A file that is not a JSON array fails as one refusal. A duplicate key inside an object refuses the whole file too. serde_json would keep the last value. This reader does not, because the last `run_id` would hide the first. After a successful parse, a bad entry is skipped and counted. One bad entry does not hide the rest.
 
+## Series screen
+
+Shown when the opened folder is a series folder. The history bench is not this screen.
+
+- Every series on one epoch axis. Loss is on a log scale so the fall from the first sample to the low sample stays readable. Hover shows the stored triple: epoch, loss, learning rate. Scroll brushes an epoch range. The learning-rate strip shares that range and keeps its own vertical scale.
+- The lowest sample on each series is marked. The last sample is not a substitute for that mark. Selecting a series draws it through the others. When the deepest low and the lowest last sample are different series, that sentence is on the stage. A second row draws the stretch around the lows on one linear scale. Every sample under the ceiling is drawn there, and a bold line follows the lowest sample in each epoch, so a climb after the low is visible in the stored units. A spike above that ceiling is a gap on that row and stays on the main chart.
+- The shared recipe is a board: schedule, warmup, weight decay, gradient clip, batch, accumulation, effective batch, epochs, sequence length, LoRA rank, alpha, dropout, checkpoints, and the target modules. A key the file adds is still shown.
+- The sidecar prints one plain-text report from the measurements. The window shows that text, and Save report writes the same string through the history bench's save dialog. The report does not use markdown headings. Ask may add one orientation paragraph with no digit, no setting, and no verdict. A fresh note that crosses that line is dropped and the pane says so. A stored note that crosses it is not shown. The source path is not part of the question. A kept note stays with the recipe fingerprint in the preferences directory. It is not written back into the series files. Opening a folder does not overwrite a richer note.
+- The report weighs the samples before it asks. The neighborhood is half an epoch around each low, and those lines stay in the report. It also states the learning rate on that sample and LoRA alpha/r when the recipe has them. It cites only the local reference cards that a printed sentence uses. The full reference list in the column stays closed. It does not fetch the network. An assumption is labeled and is not a result. It abstains when the lowest sample and the quieter neighborhood are different series. The lowest sample stays on the page either way.
+- Train, Eval, and Export model stay on the history bench. They are not on this screen.
+
 ## Screen
 
-One window.
+One window. A history folder uses the bench below. A series folder uses the series screen above.
 
-- No folder yet: one sentence that says to open the folder where backpropagate wrote `run_history.json`.
+- No folder yet: one sentence that names `run_history.json` and a series folder.
 - List: status, model, final loss, started time. Newest first.
 - Chart: the selected run's `loss_history` against stored-sample index. The caption says the chart is the stored samples, in file order. The trainer usually keeps at most 100. A longer series is still drawn as stored.
 - A run with an empty `loss_history` stays in the list. The chart says there is no stored loss.
@@ -138,6 +165,6 @@ The fixtures cover: a failed entry with an empty `loss_history`, a completed ent
 
 ## Production gate
 
-The dogfood swarm runs on this repository after slice 1 is in it and the coverage gate is green. It does not run on this file. Phase 10 is full treatment, including the identity scan, and it ends with an unsigned `2.0.0.0` package whose identity matches the table above. Submission to Partner Center stays with the operator.
+The dogfood swarm runs on this repository after slice 1 is in it and the coverage gate is green. It does not run on this file. Phase 10 is full treatment, including the identity scan, and it ends with an unsigned `2.0.0.0` package whose identity matches the table above. Submission to Partner Center stays with the operator. The series instrument does not move that submission forward by itself.
 
 The swarm is not a substitute for the fixture list. A run that never loads a `run_history.json` has not seen the product.

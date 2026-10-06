@@ -1,11 +1,31 @@
 ---
 title: Usage
-description: How the list, the chart, compare, export, and the three launch buttons behave.
+description: How a series folder, the report, the history bench, and the three launch buttons behave.
 sidebar:
   order: 2
 ---
 
-One window. No account. The history on screen is only the file you opened.
+One window. No account. The screen follows the folder you opened. A history file opens the bench below. Otherwise a series folder opens the instrument in this first section.
+
+## A series folder
+
+Every series is drawn on one epoch axis. Loss is on a log scale. Hover shows the stored epoch, loss, and learning rate. Scroll brushes an epoch range, and the learning-rate strip shares that range with its own vertical scale. The lowest sample on each series is marked. The last sample is not a substitute for that mark. Selecting a series draws it through the others.
+
+A second row draws the stretch around the lows on one linear scale. Every sample under the ceiling is drawn there. A bold line follows the lowest sample in each epoch, so a climb after the low stays visible in the stored units. A spike above that ceiling is a gap on that row and stays on the main chart.
+
+The shared recipe is shown whole: the keys whose values agree across the series, once, and a key that differs stays on the series it belongs to. A key the file adds is still shown.
+
+`training_summary.final_loss` is printed as a marker beside the curve. It is not a sample, and it is not how the report ranks.
+
+## The report
+
+The sidecar prints one plain-text report from the measurements. The pane shows that text. Save report writes the same string, through the same dialog the history bench uses for CSV and JSON. The report does not use markdown headings.
+
+The report keeps the lowest stored loss on the page even when that point does not win. It weighs the half epoch around each low, and it states the learning rate on that sample. When the deepest point and the calmest neighborhood belong to different series, the report says there is no winner. That is a result of weighing. It is not a missing page.
+
+Shared settings are listed as untested. An assumption is labeled, and it is not a result. The report cites only the reference cards a printed sentence uses. The longer list in the column stays closed. Nothing on this page is fetched.
+
+Ask may add one short paragraph on how to read the page. That paragraph may not contain a digit, name a setting, or name a verdict. A fresh note that crosses the line is dropped, and the pane says the note was omitted. A stored note that crosses the line is not shown. Opening a folder does not replace a richer note. The sidecar does not press Train.
 
 ## Before a folder is open
 

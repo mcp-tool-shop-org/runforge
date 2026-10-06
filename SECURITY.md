@@ -26,10 +26,12 @@ RunForge is a Windows bench for a folder you pick. It is not the trainer.
 | Boundary | What happens |
 |----------|----------------|
 | Run history | The app reads `run_history.json` in the folder you open, or `output/run_history.json` one level down. It does not walk the disk and it does not merge two files. |
-| Preferences | The last folder and the theme. A packaged run writes them in that package's LocalState. An unpackaged run writes them beside the executable. If the executable path cannot be read, they fall back to the process temporary directory. |
-| Train, Eval, Export model | Those buttons start an already-installed `backprop` with arguments the app builds. Nothing is passed through a shell. The child does not receive a copy of the environment. Stop ends the process tree this window started. |
+| A series folder | `run-config*.json` in the opened folder and in its immediate children. One bad file is skipped. A duplicate key refuses that file. The series files are not rewritten. |
+| Preferences | The last folder and the theme. A packaged run writes them in that package's LocalState. An unpackaged run writes them beside the executable. If the executable path cannot be read, they fall back to the process temporary directory. A sidecar note, when one is kept, stays with those preferences. |
+| Train, Eval, Export model | Those buttons start an already-installed `backprop` with arguments the app builds. Nothing is passed through a shell. The child does not receive a copy of the environment. Stop ends the process tree this window started. They are on the history bench. The sidecar does not press them. |
 | The log | The window shows that program's output. It is not sent anywhere. |
-| Network | The app does not download a model, does not install backpropagate, and does not send telemetry. |
+| The local model | Ask connects to `127.0.0.1` port `11434`. A cloud-tagged name is not chosen. The question does not include the folder path. If nothing answers, the measured report still shows. |
+| Network | The manifest does not request `internetClient`. The app does not download a model, does not install backpropagate, and does not send telemetry. |
 
 ## What RunForge does not do
 
@@ -37,3 +39,4 @@ RunForge is a Windows bench for a folder you pick. It is not the trainer.
 - It does not edit `run_history.json`.
 - It does not collect telemetry or open an account.
 - It does not start `backprop` except from Train, Eval, or Export model.
+- It does not call a cloud model, and it does not fetch the report's reference list.

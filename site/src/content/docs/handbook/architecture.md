@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: The library parses the history. The window draws it and, on request, starts backprop.
+description: The library parses a history or a series folder. The window draws it, writes the report, and, on request, starts backprop.
 sidebar:
   order: 4
 ---
@@ -19,11 +19,15 @@ A duplicate key inside a JSON object refuses the whole file. The parser that wou
 
 Unknown keys on an entry are retained. That is the opposite of a world file that must refuse an extra key. The trainer adds fields. Export of one entry writes them back out.
 
+A series folder is the other reader. It loads `run-config*.json` from the opened folder and from immediate child folders. Each sample keeps its axis, loss, learning rate, and every other logged field. The weighing and the comparison report are computed in this crate from those records. They do not call a model and they do not open the network. The report text is the string the window shows and the string Save report writes.
+
 ## `runforge`
 
 The binary is the window: `eframe` 0.36, `egui_plot` 0.37, `rfd` 0.15. `anyhow` is allowed here and not in the library. The toolchain is Rust 1.98.1, edition 2024. `Cargo.lock` is committed, and CI builds with `--locked`.
 
-The window draws the list, the chart, compare, and export. It does not recompute the curve. The caption stays "The chart is the stored samples, in file order."
+A history folder draws the list, the chart, compare, and export. It does not recompute the curve. The caption stays "The chart is the stored samples, in file order."
+
+A series folder draws every sample, the shared recipe, the low row, and the report. The report is generated again from the measurements. It is not a paraphrase stored beside them. Ask, when you press it, talks only to a local Ollama on `127.0.0.1` port `11434`, on a background thread. A cloud-tagged name is dropped. The question carries no digit from the measurements and no folder path. A note that fails the fence is not written into the memory file.
 
 The launcher is a separate path, used only by Train, Eval, and Export model. It walks `PATH` for an absolute `backprop.exe`, `backprop.com`, or extensionless `backprop`, and it skips `.cmd` and `.bat`. The walk does not block the window. A click waits for the last finished answer instead of reporting the tool missing early.
 

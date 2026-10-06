@@ -10,7 +10,9 @@ use anyhow::Context;
 use runforge_core::{VERSION, choose_prefs_dir};
 
 mod app;
+mod instrument;
 mod launch;
+mod sidecar;
 mod store;
 
 fn main() -> eframe::Result {
@@ -18,7 +20,7 @@ fn main() -> eframe::Result {
     let _ = std::fs::create_dir_all(&prefs_dir);
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 780.0])
+            .with_inner_size([1480.0, 960.0])
             .with_title(format!("RunForge {VERSION}")),
         persistence_path: Some(prefs_dir.clone()),
         ..Default::default()

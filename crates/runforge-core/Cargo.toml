@@ -1,6 +1,6 @@
 [package]
 name = "runforge-core"
-description = "Read a backpropagate run_history.json and prepare the bench."
+description = "Read a training record and prepare the instrument."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
