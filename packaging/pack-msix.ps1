@@ -21,6 +21,9 @@ $ExpectedPublisher = 'CN=5305D976-6952-4F00-9C21-3A5DB090359F'
 $ExpectedArch = 'x64'
 $ExpectedExe = 'runforge.exe'
 $ExpectedEntry = 'Windows.FullTrustApplication'
+# The 1.0.x MAUI package used the template's Application Id. Keeping it means
+# an update keeps the user's Start and taskbar pins.
+$ExpectedAppId = 'App'
 $ExpectedDisplayName = 'RunForge'
 $ExpectedPublisherDisplay = 'mcp-tool-shop'
 $ExpectedVersion = '2.0.0.0'
@@ -214,6 +217,7 @@ function Read-Identity([string]$Path) {
         Publisher            = [string]$identity.Publisher
         Version              = [string]$identity.Version
         Arch                 = [string]$identity.ProcessorArchitecture
+        AppId                = [string]$app.Id
         Executable           = [string]$app.Executable
         EntryPoint           = [string]$app.EntryPoint
         DisplayName          = [string]$props.DisplayName
@@ -229,6 +233,7 @@ function Assert-Identity($id, [string]$Where) {
     if ($id.Arch -ne $ExpectedArch) { $problems += "architecture is '$($id.Arch)'" }
     if ($id.Executable -ne $ExpectedExe) { $problems += "executable is '$($id.Executable)'" }
     if ($id.EntryPoint -ne $ExpectedEntry) { $problems += "entry point is '$($id.EntryPoint)'" }
+    if ($id.AppId -ne $ExpectedAppId) { $problems += "application id is '$($id.AppId)', and 1.0.x pins need '$ExpectedAppId'" }
     if ($id.DisplayName -ne $ExpectedDisplayName) { $problems += "display name is '$($id.DisplayName)'" }
     if ($id.PublisherDisplayName -ne $ExpectedPublisherDisplay) { $problems += "publisher display name is '$($id.PublisherDisplayName)'" }
     if ($id.Version -ne $ExpectedVersion) { $problems += "version is '$($id.Version)'" }
@@ -451,8 +456,39 @@ if (Test-Path $scanner) {
     throw 'Identity scan did not run. The package was deleted.'
 }
 
+# 1.0.1 shipped as a bundle, and Partner Center refuses a plain package once a
+# product has released one. Wrap the checked package in an unsigned bundle at the
+# same version; the bundle is what gets uploaded.
+$Bundle = [System.IO.Path]::ChangeExtension($Out, '.msixbundle')
+$bundleDir = Join-Path $env:TEMP ('runforge-msix-bundle-' + [guid]::NewGuid().ToString('n'))
+try {
+    New-Item -ItemType Directory -Path $bundleDir | Out-Null
+    Copy-Item -Path $Out -Destination $bundleDir
+    if (Test-Path $Bundle) { Remove-Item -Force $Bundle }
+    & $makeappx bundle /o /d $bundleDir /bv $ExpectedVersion /p $Bundle
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path $Bundle) { Remove-Item -Force $Bundle }
+        throw "makeappx bundle failed with exit $LASTEXITCODE"
+    }
+    $bundled = @(& tar -tf $Bundle)
+    if (-not ($bundled -match [regex]::Escape([System.IO.Path]::GetFileName($Out)))) {
+        throw 'The bundle does not contain the checked package.'
+    }
+    if ($bundled -match 'AppxSignature\.p7x') {
+        throw 'Bundle contains AppxSignature.p7x. The Store upload must be unsigned.'
+    }
+} finally {
+    if (Test-Path $bundleDir) { Remove-Item -Recurse -Force $bundleDir }
+}
+& python $scanner $Bundle
+if ($LASTEXITCODE -ne 0) {
+    Remove-Item -Force $Bundle
+    throw 'Identity scan HIT on the bundle. It was deleted and must not be uploaded.'
+}
+
 Write-Output 'RESULT PASS'
 Write-Output 'package release/RunForge_2.0.0.0_x64.msix'
+Write-Output 'bundle release/RunForge_2.0.0.0_x64.msixbundle (upload this one)'
 Write-Output "name $($sourceId.Name)"
 Write-Output "version $($sourceId.Version)"
 Write-Output "arch $($sourceId.Arch)"
