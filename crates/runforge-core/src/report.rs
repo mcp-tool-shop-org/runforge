@@ -10,6 +10,7 @@
 
 use serde_json::Value;
 
+use crate::bench::{Hypothesis, LearnedTool};
 use crate::ledger::{Ledger, Weighed};
 use crate::series::{
     Board, Reading, Series, format_measure, read_board, recipe_keys, recipe_label, recipe_text,
@@ -17,7 +18,7 @@ use crate::series::{
 use crate::weigh::{Neighborhood, Separation, Spread, Weighing, spread, weigh};
 
 /// Printed when a fresh orientation note crosses the fence.
-pub const ORIENTATION_OMITTED: &str = "Assistant note omitted: it disagreed with the measurements. The measured lines stand on their own.";
+pub const ORIENTATION_OMITTED: &str = "Assistant note omitted: it carried a number or a verdict, which only the measurements may carry. The measured lines stand on their own.";
 
 /// `unix_secs` is whole seconds since 1970-01-01 UTC.
 ///
@@ -45,6 +46,88 @@ pub fn report_file_name(board: &Board, written_on: Option<&str>) -> String {
 /// The report for this board, with no earlier weighings.
 pub fn comparison_report(board: &Board, written_on: Option<&str>) -> String {
     comparison_report_with(board, written_on, &Ledger::default())
+}
+
+/// The report with the workbench: hypotheses for this method and the learned tools.
+pub fn comparison_report_full(
+    board: &Board,
+    written_on: Option<&str>,
+    ledger: &Ledger,
+    hypotheses: &[Hypothesis],
+    tools: &[LearnedTool],
+) -> String {
+    let mut out = comparison_report_with(board, written_on, ledger);
+    let bench = bench_section(board, hypotheses, tools);
+    if bench.is_empty() {
+        return out;
+    }
+    // The workbench goes before "What to do next", after the earlier weighings.
+    match out.find("\nWhat to do next\n") {
+        Some(at) => out.insert_str(at + 1, &bench),
+        None => out.push_str(&bench),
+    }
+    out
+}
+
+fn bench_section(board: &Board, hypotheses: &[Hypothesis], tools: &[LearnedTool]) -> String {
+    let key = crate::ledger::board_key(board);
+    let method = crate::bench::board_method(board);
+    let mine: Vec<&Hypothesis> = hypotheses.iter().filter(|h| h.method == method).collect();
+    let mut out = String::new();
+    if !mine.is_empty() {
+        line(&mut out, "Hypotheses on the bench");
+        line(
+            &mut out,
+            "Each was proposed with its test fixed: a knob, a formula, and a direction. The program sets the state.",
+        );
+        for hypothesis in mine {
+            let here = hypothesis.evaluations.iter().find(|e| e.board == key);
+            let text = match here {
+                Some(evaluation) => format!(
+                    "* {} Here: {}. {}",
+                    hypothesis.statement(),
+                    evaluation.state.word(),
+                    evaluation.detail
+                ),
+                None => format!("* {} Not tested on these runs.", hypothesis.statement()),
+            };
+            line(&mut out, &text);
+            let elsewhere = hypothesis
+                .evaluations
+                .iter()
+                .filter(|e| e.board != key)
+                .count();
+            if elsewhere > 0 {
+                let decided: Vec<String> = hypothesis
+                    .evaluations
+                    .iter()
+                    .filter(|e| e.board != key)
+                    .map(|e| format!("{} on {}", e.state.word(), e.date))
+                    .collect();
+                line(&mut out, &format!("  Elsewhere: {}.", decided.join("; ")));
+            }
+        }
+        out.push('\n');
+    }
+    if !tools.is_empty() {
+        line(&mut out, "Learned tools");
+        for tool in tools {
+            let status = if tool.kept() {
+                "kept"
+            } else {
+                "provisional until used on a second folder"
+            };
+            line(
+                &mut out,
+                &format!(
+                    "* {} = {}. {} ({status}).",
+                    tool.name, tool.formula, tool.meaning
+                ),
+            );
+        }
+        out.push('\n');
+    }
+    out
 }
 
 /// The report for this board. `written_on` is the UTC day the file is written.
