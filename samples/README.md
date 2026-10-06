@@ -5,7 +5,7 @@ Two folders of real fine-tuning runs to open in RunForge. Each holds five seeds 
 - `arc-b2`: five runs, four epochs each.
 - `arc-v1`: five runs, eight epochs each, split across `podA` and `podB` to show that RunForge reads one level down.
 
-Open either folder with **Open series**.
+In RunForge, press **Open folder** and pick either one.
 
 The files are the trainer's own records with one block removed: `inputs`, which named the training data's paths and fingerprints. RunForge does not read it.
 
