@@ -3,7 +3,7 @@
 use eframe::egui::{self, Color32, RichText, Stroke};
 use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, Hypothesis, LearnedTool, Ledger, NOTE_LIMIT, Reading, Sample, SeriesRead, Step,
+    Board, Book, Hypothesis, LearnedTool, Ledger, NOTE_LIMIT, Reading, Sample, SeriesRead, Step,
     Weighing, band_segments, comparison_report_full, epoch_floor, format_measure, is_heading,
     loss_segments, low_band, orientation_allowed, orientation_omission, recipe_keys, recipe_label,
     recipe_marks, recipe_text, spikes_above, utc_date, weigh, wording_problem,
@@ -28,6 +28,8 @@ pub struct SidecarView<'a> {
     pub hypotheses: &'a [Hypothesis],
     /// Learned tools.
     pub tools: &'a [LearnedTool],
+    /// The checkpoints that issue verdicts.
+    pub book: &'a Book,
     /// The calls of the last workbench session.
     pub trace: &'a [Step],
     /// The formula box and what it last gave.
@@ -70,6 +72,7 @@ pub fn draw_instrument(
         sidecar.ledger,
         sidecar.hypotheses,
         sidecar.tools,
+        sidecar.book,
     );
     let omission = orientation_omission(board);
     let mut action = InstrumentAction::None;

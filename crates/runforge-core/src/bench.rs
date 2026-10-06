@@ -21,9 +21,36 @@ const HYPOTHESES_KEY: &str = "hypotheses";
 const MAX_TOOLS: usize = 50;
 const MAX_HYPOTHESES: usize = 60;
 const MAX_EVALUATIONS: usize = 40;
-/// The fixed tilt of the permutation e-value. Chosen before any data: with three
-/// runs per setting, a clean separation gives about 9.53 and a reversal about 0.003.
-pub const LAMBDA: f64 = 8.0;
+/// The tilt of the permutation e-value for a folder with these group sizes.
+///
+/// Fixed at design time from group sizes alone, so it is known before any folder
+/// opens and the e-value stays valid. Each entry maximizes the expected log
+/// e-value (growth rate) under a one-standard-deviation shift, by simulation
+/// (3,000 draws per size, a grid of 0.5 to 8). A single fixed 8 shrank the
+/// product on average for small folders even under a real effect (Kimi K3 review,
+/// 2026-10-06, confirmed by that simulation).
+pub fn lambda_for(n_low: usize, n_high: usize) -> f64 {
+    let (small, large) = if n_low <= n_high {
+        (n_low, n_high)
+    } else {
+        (n_high, n_low)
+    };
+    match (small, large) {
+        (1, 1) => 1.0,
+        (1, 2) => 1.5,
+        (1, 3) => 2.0,
+        (1, _) => 2.5,
+        (2, 2) | (2, 3) => 3.0,
+        (2, 4) | (3, 3) => 4.0,
+        (2, _) | (3, 4) => 5.0,
+        (3, 5) | (4, 4) => 6.0,
+        _ => 8.0,
+    }
+}
+
+/// How many new folders open between checkpoints. Fixed in advance: a checkpoint
+/// is the only time a verdict is issued, so the reporting time is never chosen.
+pub const CHECKPOINT_EVERY: u32 = 5;
 /// The false discovery rate the bench's verdicts are held to.
 pub const FDR: f64 = 0.05;
 /// One-sided level for the exact rank test. With three runs per setting, 1/20 is the smallest p there is.
@@ -458,6 +485,9 @@ pub struct Hypothesis {
     pub proposed: String,
     /// The folder the hypothesis was proposed on. Its data shaped the claim, so it is not evidence for it.
     pub proposed_on: String,
+    /// Every run RunForge knew when the hypothesis was registered. Any of them may
+    /// have shaped the claim, so a folder holding one of them never counts.
+    pub registered_runs: Vec<String>,
     pub evaluations: Vec<Evaluation>,
 }
 
@@ -984,7 +1014,14 @@ pub fn propose(
     }) {
         return Err("That hypothesis is already on the bench.".to_string());
     }
-    let id = format!("h{}", existing.len() + 1);
+    // A number never reused, even after old hypotheses are trimmed, so a checkpoint's ids stay unique.
+    let next = existing
+        .iter()
+        .filter_map(|h| h.id.strip_prefix('h').and_then(|n| n.parse::<u32>().ok()))
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let id = format!("h{next}");
     Ok(Hypothesis {
         id,
         method,
@@ -994,6 +1031,7 @@ pub fn propose(
         why: why.trim().to_string(),
         proposed: date.to_string(),
         proposed_on: board_key(board),
+        registered_runs: board.series.iter().map(run_fingerprint).collect(),
         evaluations: Vec::new(),
     })
 }
@@ -1061,6 +1099,7 @@ fn hypothesis_to(h: &Hypothesis) -> Value {
         "why": h.why,
         "proposed": h.proposed,
         "proposed_on": h.proposed_on,
+        "registered_runs": h.registered_runs,
         "evaluations": h.evaluations.iter().map(|e| serde_json::json!({
             "date": e.date,
             "board": e.board,
@@ -1084,6 +1123,16 @@ fn hypothesis_from(value: &Value) -> Option<Hypothesis> {
         why: text(object, "why").unwrap_or_default(),
         proposed: text(object, "proposed").unwrap_or_default(),
         proposed_on: text(object, "proposed_on").unwrap_or_default(),
+        registered_runs: object
+            .get("registered_runs")
+            .and_then(Value::as_array)
+            .map(|runs| {
+                runs.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
         evaluations: object
             .get("evaluations")
             .and_then(Value::as_array)
@@ -1145,7 +1194,7 @@ pub fn run_fingerprint(series: &crate::series::Series) -> String {
 /// A permutation e-value for "the measure moves this way when the knob goes up".
 ///
 /// S is the share of (low-setting run, high-setting run) pairs that move in the
-/// declared direction, ties counting half. The e-value is exp(LAMBDA * S) divided
+/// declared direction, ties counting half. The e-value is exp(lambda * S) divided
 /// by its average over every way of relabeling the pooled runs into two groups of
 /// the same sizes. If the knob does nothing, the runs are exchangeable, every
 /// relabeling is equally likely, and the e-value averages exactly 1 (Koning,
@@ -1167,7 +1216,8 @@ pub fn permutation_e(low: &[f64], high: &[f64], direction: Direction) -> Option<
         }
     };
     let observed = share(high, low);
-    // Log-sum-exp over the relabelings, so a large LAMBDA cannot overflow.
+    let lambda = lambda_for(low.len(), high.len());
+    // Log-sum-exp over the relabelings, so a large lambda cannot overflow.
     let mut exponents = Vec::new();
     let mut pick = Vec::with_capacity(k);
     combinations(n, k, 0, &mut pick, &mut |chosen| {
@@ -1179,11 +1229,11 @@ pub fn permutation_e(low: &[f64], high: &[f64], direction: Direction) -> Option<
                 l.push(*value);
             }
         }
-        exponents.push(LAMBDA * share(&h, &l));
+        exponents.push(lambda * share(&h, &l));
     });
     let top = exponents.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let mean = exponents.iter().map(|x| (x - top).exp()).sum::<f64>() / exponents.len() as f64;
-    Some((LAMBDA * observed - top).exp() / mean)
+    Some((lambda * observed - top).exp() / mean)
 }
 
 /// One hypothesis's evidence gathered across folders.
@@ -1207,8 +1257,9 @@ impl Evidence {
 
 /// Multiply the folders' e-values, oldest folder first.
 ///
-/// A folder counts when it gave a test, is not the folder the hypothesis was
-/// proposed on, and shares no run with a folder already counted. Which folders
+/// A folder counts when it gave a test, holds no run RunForge knew when the
+/// hypothesis was registered (those runs may have shaped it), and shares no run
+/// with a folder already counted. Which folders
 /// count depends only on that order and on run identity, never on the values,
 /// so the product of e-values from new runs stays valid however the folders
 /// were chosen (Grunwald, de Heide, and Koolen 2024, "Safe testing", JRSS-B 86(5);
@@ -1223,8 +1274,17 @@ pub fn evidence(hypothesis: &Hypothesis) -> Evidence {
         let (Some(for_here), Some(against_here)) = (evaluation.e_for, evaluation.e_against) else {
             continue;
         };
-        if !hypothesis.proposed_on.is_empty() && evaluation.board == hypothesis.proposed_on {
-            left_out.push((evaluation.date.clone(), "proposed on these runs"));
+        let before = evaluation
+            .runs
+            .iter()
+            .any(|run| hypothesis.registered_runs.contains(run));
+        if before
+            || (!hypothesis.proposed_on.is_empty() && evaluation.board == hypothesis.proposed_on)
+        {
+            left_out.push((
+                evaluation.date.clone(),
+                "holds runs seen before the hypothesis was registered",
+            ));
             continue;
         }
         if evaluation
@@ -1269,23 +1329,28 @@ impl Verdict {
     }
 }
 
-/// The bench's verdicts: e-BH at FDR across every hypothesis given (Wang and Ramdas 2022, JRSS-B 84(3)).
+/// The bench's verdicts: e-BH at FDR over the 2K directional e-values of K
+/// hypotheses (Wang and Ramdas 2022, JRSS-B 84(3)).
 ///
-/// With K hypotheses, sort their e-values (e_any) from largest; the largest k
-/// for which the k-th is at least K / (FDR * k) marks those k as discovered. A
-/// discovered hypothesis is supported when its evidence for outweighs its
-/// evidence against, and refuted otherwise. e-BH holds the false discovery rate
-/// under any dependence between the hypotheses. The direction call is the larger
-/// of the two products; it is not separately error-controlled.
+/// Each hypothesis contributes two e-values for "no effect": its evidence for the
+/// declared direction and its evidence against. Sort all 2K from largest; the
+/// largest k for which the k-th is at least 2K / (FDR * k) marks those k as
+/// discoveries. A discovered "for" is supported; a discovered "against" is
+/// refuted. Both are directional discoveries held to the same false discovery
+/// rate, under any dependence (Kimi K3 review, 2026-10-06).
 pub fn verdicts(hypotheses: &[Hypothesis]) -> Vec<(Evidence, Verdict)> {
     let gathered: Vec<Evidence> = hypotheses.iter().map(evidence).collect();
-    let k_total = gathered.len();
-    let mut order: Vec<usize> = (0..k_total).collect();
-    order.sort_by(|a, b| gathered[*b].e_any().total_cmp(&gathered[*a].e_any()));
+    let family = 2 * gathered.len();
+    let mut entries: Vec<(usize, bool, f64)> = Vec::with_capacity(family);
+    for (index, evidence) in gathered.iter().enumerate() {
+        entries.push((index, true, evidence.e_for));
+        entries.push((index, false, evidence.e_against));
+    }
+    entries.sort_by(|a, b| b.2.total_cmp(&a.2));
     let mut discovered = 0;
-    for (rank, index) in order.iter().enumerate() {
+    for (rank, entry) in entries.iter().enumerate() {
         let k = rank + 1;
-        if gathered[*index].e_any() >= k_total as f64 / (FDR * k as f64) {
+        if entry.2 >= family as f64 / (FDR * k as f64) {
             discovered = k;
         }
     }
@@ -1293,18 +1358,165 @@ pub fn verdicts(hypotheses: &[Hypothesis]) -> Vec<(Evidence, Verdict)> {
         .iter()
         .map(|evidence| (evidence.clone(), Verdict::Open))
         .collect();
-    for index in order.into_iter().take(discovered) {
-        let evidence = &out[index].0;
-        out[index].1 = if evidence.e_for >= evidence.e_against {
-            Verdict::Supported
-        } else {
-            Verdict::Refuted
+    for (index, declared, _) in entries.into_iter().take(discovered) {
+        out[index].1 = match (out[index].1, declared) {
+            (Verdict::Open, true) => Verdict::Supported,
+            (Verdict::Open, false) => Verdict::Refuted,
+            // Both directions discovered cannot settle a direction.
+            _ => Verdict::Open,
         };
     }
     out
 }
 
-/// The e-value a single hypothesis needs, alone at the top of a bench of `k_total`.
+/// The e-value a single direction needs, alone at the top of a bench of `k_total` hypotheses.
 pub fn threshold(k_total: usize) -> f64 {
-    k_total.max(1) as f64 / FDR
+    (2 * k_total.max(1)) as f64 / FDR
+}
+
+/// One hypothesis at a checkpoint: its id, verdict, and evidence for and against.
+pub type Judged = (String, Verdict, f64, f64);
+
+/// One frozen batch of verdicts. Its family is every hypothesis registered by then.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Checkpoint {
+    pub number: u32,
+    pub date: String,
+    /// The number of hypotheses in the family.
+    pub family: usize,
+    /// Per hypothesis id: the verdict, and the evidence for and against at the time.
+    pub results: Vec<Judged>,
+}
+
+impl Checkpoint {
+    pub fn verdict_of(&self, id: &str) -> Option<&Judged> {
+        self.results.iter().find(|result| result.0 == id)
+    }
+}
+
+/// The checkpoints so far, and how many new folders have opened since the last one.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Book {
+    pub checkpoints: Vec<Checkpoint>,
+    pub since: u32,
+}
+
+impl Book {
+    pub fn latest_for(&self, id: &str) -> Option<(&Checkpoint, &Judged)> {
+        self.checkpoints
+            .iter()
+            .rev()
+            .find_map(|checkpoint| checkpoint.verdict_of(id).map(|result| (checkpoint, result)))
+    }
+
+    pub fn until_next(&self) -> u32 {
+        CHECKPOINT_EVERY.saturating_sub(self.since)
+    }
+}
+
+/// Count a newly opened folder. Every `CHECKPOINT_EVERY` new folders, freeze the
+/// verdicts of every registered hypothesis as one batch e-BH. A checkpoint's verdicts
+/// are final for it; between checkpoints the report shows evidence, not verdicts.
+/// Reporting only at a schedule fixed in advance keeps the batch guarantee, which a
+/// re-run over a growing family would not (Kimi K3 review, 2026-10-06).
+pub fn note_new_folder(
+    book: &mut Book,
+    hypotheses: &[Hypothesis],
+    date: &str,
+) -> Option<Checkpoint> {
+    book.since += 1;
+    if book.since < CHECKPOINT_EVERY {
+        return None;
+    }
+    book.since = 0;
+    let judged = verdicts(hypotheses);
+    let checkpoint = Checkpoint {
+        number: book.checkpoints.last().map(|c| c.number).unwrap_or(0) + 1,
+        date: date.to_string(),
+        family: hypotheses.len(),
+        results: hypotheses
+            .iter()
+            .zip(judged)
+            .map(|(h, (evidence, verdict))| {
+                (h.id.clone(), verdict, evidence.e_for, evidence.e_against)
+            })
+            .collect(),
+    };
+    book.checkpoints.push(checkpoint.clone());
+    Some(checkpoint)
+}
+
+const BOOK_KEY: &str = "checkpoints";
+
+pub fn read_book(directory: &Path) -> Book {
+    let memory = read_memory(directory);
+    let Some(object) = memory.get(BOOK_KEY).and_then(Value::as_object) else {
+        return Book::default();
+    };
+    let checkpoints = object
+        .get("list")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let item = item.as_object()?;
+                    Some(Checkpoint {
+                        number: item.get("number")?.as_u64()? as u32,
+                        date: text(item, "date")?,
+                        family: item.get("family")?.as_u64()? as usize,
+                        results: item
+                            .get("results")?
+                            .as_array()?
+                            .iter()
+                            .filter_map(|result| {
+                                let result = result.as_object()?;
+                                let verdict = match result.get("verdict")?.as_str()? {
+                                    "supported" => Verdict::Supported,
+                                    "refuted" => Verdict::Refuted,
+                                    _ => Verdict::Open,
+                                };
+                                Some((
+                                    text(result, "id")?,
+                                    verdict,
+                                    result.get("e_for")?.as_f64()?,
+                                    result.get("e_against")?.as_f64()?,
+                                ))
+                            })
+                            .collect(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Book {
+        checkpoints,
+        since: object.get("since").and_then(Value::as_u64).unwrap_or(0) as u32,
+    }
+}
+
+pub fn write_book(directory: &Path, book: &Book) -> Result<(), std::io::Error> {
+    let list: Vec<Value> = book
+        .checkpoints
+        .iter()
+        .map(|checkpoint| {
+            serde_json::json!({
+                "number": checkpoint.number,
+                "date": checkpoint.date,
+                "family": checkpoint.family,
+                "results": checkpoint.results.iter().map(|(id, verdict, e_for, e_against)| serde_json::json!({
+                    "id": id,
+                    "verdict": verdict.word(),
+                    "e_for": e_for,
+                    "e_against": e_against,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let mut memory = read_memory(directory);
+    memory.insert(
+        BOOK_KEY.to_string(),
+        serde_json::json!({"since": book.since, "list": list}),
+    );
+    write_memory(directory, &memory)
 }

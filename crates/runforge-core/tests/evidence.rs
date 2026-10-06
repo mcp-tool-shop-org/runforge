@@ -2,7 +2,7 @@
 //! defining property exactly, then Ville's bound by simulation.
 
 use runforge_core::{
-    Direction, Evaluation, Hypothesis, LAMBDA, State, Verdict, evidence, permutation_e, record,
+    Direction, Evaluation, Hypothesis, State, Verdict, evidence, lambda_for, permutation_e, record,
     threshold, verdicts,
 };
 
@@ -73,20 +73,35 @@ fn a_clean_separation_earns_evidence_and_a_reversal_spends_it() {
     let high = [0.1, 0.12, 0.11];
     let clean = permutation_e(&low, &high, Direction::Lower).unwrap();
     // The 20 relabelings of a 3-by-3 split give U = 0..9 pairs with these counts.
+    let lambda = lambda_for(3, 3);
+    assert_eq!(lambda, 4.0);
     let counts = [1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0, 2.0, 1.0, 1.0];
     let mean: f64 = counts
         .iter()
         .enumerate()
-        .map(|(u, c)| c * (LAMBDA * u as f64 / 9.0).exp())
+        .map(|(u, c)| c * (lambda * u as f64 / 9.0).exp())
         .sum::<f64>()
         / 20.0;
-    assert!((clean - LAMBDA.exp() / mean).abs() < 1e-9, "{clean}");
-    assert!((clean - 9.532).abs() < 0.001);
+    assert!((clean - lambda.exp() / mean).abs() < 1e-9, "{clean}");
+    assert!((clean - 4.51).abs() < 0.01, "{clean}");
     let reversed = permutation_e(&low, &high, Direction::Higher).unwrap();
-    assert!(reversed < 0.01, "{reversed}");
+    assert!(reversed < 0.1, "{reversed}");
     let single = permutation_e(&[0.3], &[0.1], Direction::Lower).unwrap();
-    assert!((single - 2.0 * LAMBDA.exp() / (1.0 + LAMBDA.exp())).abs() < 1e-12);
+    let one = lambda_for(1, 1);
+    assert!((single - 2.0 * one.exp() / (1.0 + one.exp())).abs() < 1e-12);
     assert!(permutation_e(&[0.1; 11], &[0.2; 10], Direction::Lower).is_none());
+}
+
+#[test]
+fn the_lambda_table_depends_only_on_group_sizes_and_is_symmetric() {
+    for a in 1..=6 {
+        for b in 1..=6 {
+            assert_eq!(lambda_for(a, b), lambda_for(b, a));
+            assert!(lambda_for(a, b) >= 1.0 && lambda_for(a, b) <= 8.0);
+        }
+    }
+    assert!(lambda_for(1, 1) < lambda_for(3, 3));
+    assert_eq!(lambda_for(5, 5), 8.0);
 }
 
 /// Ville's inequality: under no effect, the running product of valid e-values
@@ -159,6 +174,7 @@ fn hypothesis(id: &str, proposed_on: &str) -> Hypothesis {
         why: String::new(),
         proposed: "2026-10-01".into(),
         proposed_on: proposed_on.into(),
+        registered_runs: Vec::new(),
         evaluations: Vec::new(),
     }
 }
@@ -186,11 +202,18 @@ fn the_proposal_folder_and_reused_runs_are_not_counted_and_order_is_fixed() {
     assert_eq!(gathered.counted, vec!["2026-10-02", "2026-10-04"]);
     assert!((gathered.e_for - 6.0).abs() < 1e-12);
     assert!((gathered.e_against - 0.3).abs() < 1e-12);
-    assert_eq!(gathered.left_out[0].1, "proposed on these runs");
+    assert_eq!(
+        gathered.left_out[0].1,
+        "holds runs seen before the hypothesis was registered"
+    );
     assert_eq!(
         gathered.left_out[1].1,
         "shares runs with a folder already counted"
     );
+    // A run RunForge knew at registration rules its folder out, not just the proposal folder.
+    let mut seen = h.clone();
+    seen.registered_runs = vec!["d2".into()];
+    assert_eq!(evidence(&seen).counted, vec!["2026-10-02"]);
     // B tested again keeps its place: C still loses to B, whatever B now says.
     record(
         &mut h,
@@ -202,21 +225,29 @@ fn the_proposal_folder_and_reused_runs_are_not_counted_and_order_is_fixed() {
 }
 
 #[test]
-fn e_bh_discovers_only_what_clears_its_share_and_reads_the_direction() {
+fn e_bh_runs_over_both_directions_of_every_hypothesis() {
     let mut strong = hypothesis("h1", "");
-    record(&mut strong, evaluation("A", "d1", 9.5, 0.01, &["a"]));
-    record(&mut strong, evaluation("B", "d2", 9.5, 0.01, &["b"]));
+    record(&mut strong, evaluation("A", "d1", 9.0, 0.01, &["a"]));
+    record(&mut strong, evaluation("B", "d2", 9.0, 0.01, &["b"]));
     let mut reversed = hypothesis("h2", "");
-    record(&mut reversed, evaluation("A", "d1", 0.01, 9.5, &["a"]));
-    record(&mut reversed, evaluation("B", "d2", 0.01, 9.5, &["b"]));
+    record(&mut reversed, evaluation("A", "d1", 0.01, 9.0, &["a"]));
+    record(&mut reversed, evaluation("B", "d2", 0.01, 9.0, &["b"]));
     let mut weak = hypothesis("h3", "");
     record(&mut weak, evaluation("A", "d1", 2.0, 0.5, &["a"]));
     let bench = vec![strong, reversed, weak];
-    assert_eq!(threshold(bench.len()), 60.0);
+    // Six directional e-values: one alone needs 6 / 0.05 = 120; two together need 60 each.
+    assert_eq!(threshold(bench.len()), 120.0);
     let results = verdicts(&bench);
-    // e_any is 45.1 for the first two: the 2nd largest needs 3 / (0.05 * 2) = 30.
-    assert_eq!(results[0].1, Verdict::Supported);
-    assert_eq!(results[1].1, Verdict::Refuted);
+    assert_eq!(
+        results[0].1,
+        Verdict::Supported,
+        "81 clears 60 as one of two"
+    );
+    assert_eq!(
+        results[1].1,
+        Verdict::Refuted,
+        "its against-direction is the discovery"
+    );
     assert_eq!(results[2].1, Verdict::Open);
     let alone = verdicts(&bench[2..]);
     assert_eq!(alone[0].1, Verdict::Open);

@@ -114,9 +114,17 @@ pub struct Workbench {
     /// A closing note that crossed the fence was dropped.
     pub note_dropped: bool,
     pub finished: bool,
+    /// Runs RunForge had seen before this session; a hypothesis registered now excludes them.
+    known_runs: Vec<String>,
 }
 
 impl Workbench {
+    /// Name the runs already seen, so a hypothesis registered in this session cannot count them.
+    pub fn knowing(mut self, runs: Vec<String>) -> Self {
+        self.known_runs = runs;
+        self
+    }
+
     pub fn new(
         board: Board,
         library: Vec<LearnedTool>,
@@ -135,6 +143,7 @@ impl Workbench {
             note: None,
             note_dropped: false,
             finished: false,
+            known_runs: Vec::new(),
         }
     }
 
@@ -334,11 +343,12 @@ Use at most ",
             .iter()
             .filter(|h| h.method == crate::bench::board_method(&self.board))
             .map(|h| {
-                let judged = crate::bench::verdicts(std::slice::from_ref(h));
+                let so_far = crate::bench::evidence(h);
                 format!(
-                    "- {} (across folders: {})",
+                    "- {} (evidence so far: {} for, {} against)",
                     h.statement(),
-                    judged[0].1.word()
+                    format_measure(so_far.e_for),
+                    format_measure(so_far.e_against)
                 )
             })
             .collect();
@@ -542,6 +552,11 @@ Use at most ",
             Ok(hypothesis) => hypothesis,
             Err(reason) => return (false, reason),
         };
+        for run in &self.known_runs {
+            if !hypothesis.registered_runs.contains(run) {
+                hypothesis.registered_runs.push(run.clone());
+            }
+        }
         self.note_learned_use(formula);
         let (evaluation, comparison) = test(&self.board, &hypothesis, &tools, &self.date);
         let mut text = format!(

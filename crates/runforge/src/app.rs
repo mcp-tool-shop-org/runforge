@@ -10,13 +10,13 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, EvalSummary, History, HistoryError, HyperDiff, Hypothesis, LearnedTool, Ledger,
+    Board, Book, EvalSummary, History, HistoryError, HyperDiff, Hypothesis, LearnedTool, Ledger,
     LossSample, Prefs, Reading, RunEntry, Step, Theme, VERSION, Workbench, board_method,
     comparison_report_full, curve_csv, curve_segments, earlier_readings, entry_json, evaluate,
-    finite_points, format_f64, hyperparameter_diffs, ledger_for, list_csv, load_folder,
-    load_series_folder, note_use, read_board, read_hypotheses, read_prefs, read_tools, recall,
-    record, record_weighing, remember, report_file_name, test_all, weighed_now, write_hypotheses,
-    write_prefs, write_tools,
+    finite_points, format_f64, hyperparameter_diffs, known_runs, ledger_for, list_csv, load_folder,
+    load_series_folder, note_new_folder, note_use, read_board, read_book, read_hypotheses,
+    read_prefs, read_tools, recall, record, record_weighing, remember, report_file_name, test_all,
+    weighed_now, write_book, write_hypotheses, write_prefs, write_tools,
 };
 
 use crate::instrument::{InstrumentAction, SidecarView, draw_instrument, report_date};
@@ -93,6 +93,8 @@ pub struct RunForgeApp {
     /// The learned tools and the hypotheses kept beside the preferences.
     tools: Vec<LearnedTool>,
     hypotheses: Vec<Hypothesis>,
+    /// The checkpoints and the count of new folders since the last.
+    book: Book,
     /// The tool calls of the last workbench session on this series.
     trace: Vec<Step>,
     /// The formula typed into the pane, and what it gave.
@@ -139,6 +141,7 @@ impl RunForgeApp {
             ask: None,
             tools: Vec::new(),
             hypotheses: Vec::new(),
+            book: Book::default(),
             trace: Vec::new(),
             formula: String::new(),
             formula_lines: Vec::new(),
@@ -223,6 +226,18 @@ impl RunForgeApp {
                 self.ledger = ledger_for(&self.prefs_dir, &board);
                 let today = report_date().unwrap_or_default();
                 self.retest_hypotheses(&board, &today);
+                self.book = read_book(&self.prefs_dir);
+                if self.ledger.same_runs.is_none() {
+                    // A new folder counts toward the next checkpoint, whatever it shows.
+                    if let Some(checkpoint) =
+                        note_new_folder(&mut self.book, &self.hypotheses, &today)
+                    {
+                        self.note = format!("Checkpoint {} judged the bench.", checkpoint.number);
+                    }
+                    if let Err(error) = write_book(&self.prefs_dir, &self.book) {
+                        self.note = format!("could not keep the checkpoints: {error}");
+                    }
+                }
                 self.trace.clear();
                 self.formula_lines.clear();
                 if let Err(error) = record_weighing(&self.prefs_dir, &weighed_now(&board, &today)) {
@@ -269,6 +284,7 @@ impl RunForgeApp {
                 blocked: self.orientation_blocked,
                 hypotheses: &on_bench,
                 tools: &self.tools,
+                book: &self.book,
                 trace: &self.trace,
                 formula: &mut self.formula,
                 formula_lines: &self.formula_lines,
@@ -282,12 +298,15 @@ impl RunForgeApp {
                 self.sidecar_answer.clear();
                 self.trace.clear();
                 let today = report_date().unwrap_or_default();
-                self.ask = Some(start_bench(Workbench::new(
-                    board.clone(),
-                    self.tools.clone(),
-                    self.hypotheses.clone(),
-                    &today,
-                )));
+                self.ask = Some(start_bench(
+                    Workbench::new(
+                        board.clone(),
+                        self.tools.clone(),
+                        self.hypotheses.clone(),
+                        &today,
+                    )
+                    .knowing(known_runs(&self.prefs_dir)),
+                ));
             }
             InstrumentAction::TryFormula => {
                 self.formula_lines = match evaluate(&board, &self.formula, &self.tools) {
@@ -304,6 +323,7 @@ impl RunForgeApp {
                     &self.ledger,
                     &on_bench,
                     &self.tools,
+                    &self.book,
                 );
                 self.save_text(&name, &text);
             }
@@ -2110,6 +2130,8 @@ mod tests {
         app.ask_folder = Box::new(move |_| Some(chosen.clone()));
         let mut ui = Harness::new();
         ui.click(&mut app, "Open folder");
+        assert_eq!(runforge_core::read_book(&prefs).since, 1);
+        assert_eq!(app.book.since, 1);
         let stored = runforge_core::read_hypotheses(&prefs);
         assert_eq!(stored[0].evaluations.len(), 1);
         assert_eq!(stored[0].state(), Some(&runforge_core::State::Inconclusive));

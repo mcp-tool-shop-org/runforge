@@ -138,6 +138,19 @@ pub fn board_key(board: &Board) -> String {
     )
 }
 
+/// Every run identity the ledger holds: the runs RunForge has seen.
+pub fn known_runs(directory: &Path) -> Vec<String> {
+    let mut runs: Vec<String> = Vec::new();
+    for item in read_ledger(directory) {
+        for id in item.ids {
+            if !runs.contains(&id) {
+                runs.push(id);
+            }
+        }
+    }
+    runs
+}
+
 /// The board as weighed today.
 pub fn weighed_now(board: &Board, date: &str) -> Weighed {
     let weighing = weigh(board);

@@ -357,8 +357,10 @@ fn tools_hypotheses_notes_and_weighings_share_one_memory_file() {
 }
 
 #[test]
-fn evidence_gathers_across_folders_until_the_bench_can_decide() {
-    use runforge_core::{Verdict, comparison_report_full, verdicts};
+fn evidence_gathers_across_folders_until_a_checkpoint_decides() {
+    use runforge_core::{
+        Book, CHECKPOINT_EVERY, Verdict, comparison_report_full, note_new_folder, verdicts,
+    };
     let date = "2026-10-06";
     let first = rank_board(&[0.3, 0.32, 0.31], &[0.1, 0.12, 0.11]);
     let proposal = Proposal {
@@ -370,38 +372,83 @@ fn evidence_gathers_across_folders_until_the_bench_can_decide() {
     let mut h = propose(&first, &[], &[], &proposal, date).unwrap();
     let (evaluation, _) = test_hypothesis(&first, &h, &[], date);
     record(&mut h, evaluation);
-    // Proposed here, so this folder does not count, however clean it is.
+    // Seen at registration, so this folder does not count, however clean it is.
+    assert!(evidence_of(&h).counted.is_empty());
+    let later = [
+        (
+            rank_board(&[0.29, 0.33, 0.35], &[0.13, 0.09, 0.105]),
+            "2026-10-07",
+        ),
+        (
+            rank_board(&[0.36, 0.305, 0.34], &[0.125, 0.14, 0.08]),
+            "2026-10-08",
+        ),
+        (
+            rank_board(&[0.37, 0.31, 0.38], &[0.15, 0.085, 0.095]),
+            "2026-10-09",
+        ),
+    ];
+    for (board, day) in &later[..2] {
+        let (evaluation, _) = test_hypothesis(board, &h, &[], day);
+        record(&mut h, evaluation);
+    }
+    // Two clean folders give about 4.5 squared, short of the 40 one direction needs alone.
     assert_eq!(verdicts(std::slice::from_ref(&h))[0].1, Verdict::Open);
-    let second = rank_board(&[0.29, 0.33, 0.35], &[0.13, 0.09, 0.1]);
-    let (evaluation, _) = test_hypothesis(&second, &h, &[], "2026-10-07");
+    let (evaluation, _) = test_hypothesis(&later[2].0, &h, &[], later[2].1);
     record(&mut h, evaluation);
-    let one = verdicts(std::slice::from_ref(&h));
+    let three = verdicts(std::slice::from_ref(&h));
+    assert_eq!(three[0].1, Verdict::Supported);
     assert_eq!(
-        one[0].1,
-        Verdict::Open,
-        "one clean folder gives about 9.5, short of 20"
+        three[0].0.counted,
+        vec!["2026-10-07", "2026-10-08", "2026-10-09"]
     );
-    let third = rank_board(&[0.36, 0.3, 0.34], &[0.12, 0.14, 0.08]);
-    let (evaluation, _) = test_hypothesis(&third, &h, &[], "2026-10-08");
-    record(&mut h, evaluation);
-    let two = verdicts(std::slice::from_ref(&h));
-    assert_eq!(two[0].1, Verdict::Supported);
-    assert_eq!(two[0].0.counted, vec!["2026-10-07", "2026-10-08"]);
-    let report = comparison_report_full(
-        &third,
-        Some("2026-10-08"),
+
+    // The report shows evidence between checkpoints, and a verdict only once one runs.
+    let mut book = Book::default();
+    let before = comparison_report_full(
+        &later[2].0,
+        None,
         &Default::default(),
         std::slice::from_ref(&h),
         &[],
+        &book,
     );
-    assert!(report.contains("Across folders: supported."), "{report}");
-    assert!(report.contains("from two folders"));
+    assert!(
+        before.contains("No checkpoint has judged it yet."),
+        "{before}"
+    );
+    assert!(before.contains("from three folders"));
+    for _ in 1..CHECKPOINT_EVERY {
+        assert!(note_new_folder(&mut book, std::slice::from_ref(&h), "2026-10-09").is_none());
+    }
+    let checkpoint = note_new_folder(&mut book, std::slice::from_ref(&h), "2026-10-09").unwrap();
+    assert_eq!(checkpoint.number, 1);
+    let after = comparison_report_full(
+        &later[2].0,
+        None,
+        &Default::default(),
+        std::slice::from_ref(&h),
+        &[],
+        &book,
+    );
+    assert!(
+        after.contains("At checkpoint 1 (2026-10-09, one hypothesis): supported."),
+        "{after}"
+    );
     let first_report = comparison_report_full(
         &first,
         None,
         &Default::default(),
         std::slice::from_ref(&h),
         &[],
+        &book,
     );
-    assert!(first_report.contains("Not counted: it was proposed on these runs."));
+    assert!(
+        first_report
+            .contains("Not counted: these runs were seen before the hypothesis was registered.")
+    );
+}
+
+fn evidence_of(h: &runforge_core::Hypothesis) -> runforge_core::Evidence {
+    runforge_core::evidence(h)
 }

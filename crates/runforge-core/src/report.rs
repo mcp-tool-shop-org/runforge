@@ -10,7 +10,7 @@
 
 use serde_json::Value;
 
-use crate::bench::{Hypothesis, LearnedTool};
+use crate::bench::{Book, Hypothesis, LearnedTool};
 use crate::ledger::{Ledger, Weighed};
 use crate::series::{
     Board, Reading, Series, format_measure, read_board, recipe_keys, recipe_label, recipe_text,
@@ -55,9 +55,10 @@ pub fn comparison_report_full(
     ledger: &Ledger,
     hypotheses: &[Hypothesis],
     tools: &[LearnedTool],
+    book: &Book,
 ) -> String {
     let mut out = comparison_report_with(board, written_on, ledger);
-    let bench = bench_section(board, hypotheses, tools);
+    let bench = bench_section(board, hypotheses, tools, book);
     if bench.is_empty() {
         return out;
     }
@@ -69,50 +70,75 @@ pub fn comparison_report_full(
     out
 }
 
-fn bench_section(board: &Board, hypotheses: &[Hypothesis], tools: &[LearnedTool]) -> String {
+fn bench_section(
+    board: &Board,
+    hypotheses: &[Hypothesis],
+    tools: &[LearnedTool],
+    book: &Book,
+) -> String {
     let key = crate::ledger::board_key(board);
     let method = crate::bench::board_method(board);
-    // e-BH runs over the whole bench; only this method's hypotheses are printed.
-    let judged = crate::bench::verdicts(hypotheses);
-    let needed = crate::bench::threshold(hypotheses.len());
     let mut out = String::new();
-    let mine: Vec<(
-        &Hypothesis,
-        &(crate::bench::Evidence, crate::bench::Verdict),
-    )> = hypotheses
-        .iter()
-        .zip(&judged)
-        .filter(|(h, _)| h.method == method)
-        .collect();
+    let mine: Vec<&Hypothesis> = hypotheses.iter().filter(|h| h.method == method).collect();
     if !mine.is_empty() {
         line(&mut out, "Hypotheses on the bench");
+        let schedule = match book.until_next() {
+            1 => "the next one comes with the next new folder".to_string(),
+            n => format!(
+                "the next one comes after {} more new folders",
+                count_word(n as usize, false)
+            ),
+        };
         line(
             &mut out,
             &format!(
-                "Each was proposed with its test fixed: a knob, a formula, and a direction. Evidence is an e-value per folder, multiplied across folders with new runs; the folder a hypothesis was proposed on does not count. A verdict needs e-BH at a 5% false discovery rate across the {} hypotheses on the bench: one alone needs {}.",
-                hypotheses.len(),
-                format_measure(needed)
+                "Each was proposed with its test fixed: a knob, a formula, and a direction. Each folder gives an e-value for each direction, multiplied across folders of new runs; a folder holding a run seen before the hypothesis was registered does not count. Verdicts are issued only at checkpoints, one every {} new folders, by e-BH at a 5% false discovery rate over both directions of every hypothesis on the bench; {schedule}.",
+                count_word(crate::bench::CHECKPOINT_EVERY as usize, false)
             ),
         );
-        for (hypothesis, (gathered, verdict)) in mine {
+        for hypothesis in mine {
+            let so_far = crate::bench::evidence(hypothesis);
+            let verdict = match book.latest_for(&hypothesis.id) {
+                Some((checkpoint, (_, verdict, _, _))) => format!(
+                    "At checkpoint {} ({}, {} {}): {}.",
+                    checkpoint.number,
+                    checkpoint.date,
+                    count_word(checkpoint.family, false),
+                    if checkpoint.family == 1 {
+                        "hypothesis"
+                    } else {
+                        "hypotheses"
+                    },
+                    verdict.word()
+                ),
+                None => "No checkpoint has judged it yet.".to_string(),
+            };
             line(
                 &mut out,
                 &format!(
-                    "* {} Across folders: {}. Evidence for {}, against {}, from {}.",
+                    "* {} {verdict} Evidence so far: {} for, {} against, from {}. One direction alone needs {} at this bench's size.",
                     hypothesis.statement(),
-                    verdict.word(),
-                    format_measure(gathered.e_for),
-                    format_measure(gathered.e_against),
-                    match gathered.counted.len() {
-                        0 => "no counted folder yet".to_string(),
+                    format_measure(so_far.e_for),
+                    format_measure(so_far.e_against),
+                    match so_far.counted.len() {
+                        0 => "no counted folder".to_string(),
                         1 => "one folder".to_string(),
                         n => format!("{} folders", count_word(n, false)),
-                    }
+                    },
+                    format_measure(crate::bench::threshold(hypotheses.len()))
                 ),
             );
             if let Some(evaluation) = hypothesis.evaluations.iter().find(|e| e.board == key) {
-                let counted = if key == hypothesis.proposed_on {
-                    " Not counted: it was proposed on these runs."
+                let counted = if so_far
+                    .left_out
+                    .iter()
+                    .any(|(date, _)| date == &evaluation.date)
+                    && evaluation
+                        .runs
+                        .iter()
+                        .any(|run| hypothesis.registered_runs.contains(run))
+                {
+                    " Not counted: these runs were seen before the hypothesis was registered."
                 } else {
                     ""
                 };
@@ -124,16 +150,6 @@ fn bench_section(board: &Board, hypotheses: &[Hypothesis], tools: &[LearnedTool]
                         evaluation.detail
                     ),
                 );
-            }
-            for (date, why) in &gathered.left_out {
-                if hypothesis
-                    .evaluations
-                    .iter()
-                    .any(|e| e.board == key && &e.date == date)
-                {
-                    continue;
-                }
-                line(&mut out, &format!("  Not counted ({date}): {why}."));
             }
         }
         out.push('\n');

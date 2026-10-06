@@ -20,11 +20,14 @@ mod weigh;
 
 pub use bench::{
     ALPHA, Arm, Column, Direction, Evaluation, Evidence, Experiment, FDR, Hypothesis,
-    KnobComparison, LAMBDA, LearnedTool, Noise, Proposal, State, Verdict, board_method,
-    compare_knob, evaluate, evidence, exact_p, experiment_for, learn_tool, note_use, permutation_e,
-    propose, read_hypotheses, read_tools, reason_allowed, record, run_fingerprint, seed_noise,
-    seeds_needed, test as test_hypothesis, test_all, threshold, verdicts, wording_problem,
-    write_hypotheses, write_tools,
+    KnobComparison, LearnedTool, Noise, Proposal, State, Verdict, board_method, compare_knob,
+    evaluate, evidence, exact_p, experiment_for, learn_tool, note_use, permutation_e, propose,
+    read_hypotheses, read_tools, reason_allowed, record, run_fingerprint, seed_noise, seeds_needed,
+    test as test_hypothesis, test_all, threshold, verdicts, wording_problem, write_hypotheses,
+    write_tools,
+};
+pub use bench::{
+    Book, CHECKPOINT_EVERY, Checkpoint, lambda_for, note_new_folder, read_book, write_book,
 };
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
@@ -33,7 +36,9 @@ pub use history::{
     EvalSummary, History, HyperDiff, LossSample, RunEntry, hyperparameter_diffs, load_bytes,
     load_folder, load_text, pick_best_loss,
 };
-pub use ledger::{Ledger, RunMark, Weighed, board_key, ledger_for, record_weighing, weighed_now};
+pub use ledger::{
+    Ledger, RunMark, Weighed, board_key, known_runs, ledger_for, record_weighing, weighed_now,
+};
 pub use prefs::{PREFS_FILE, Prefs, Theme, choose_prefs_dir, read_prefs, write_prefs};
 pub use report::{
     ORIENTATION_OMITTED, comparison_report, comparison_report_full, comparison_report_with,

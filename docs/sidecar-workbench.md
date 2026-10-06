@@ -87,24 +87,32 @@ A note can still contain a wrong claim in words. That is why the pane labels it.
 
 ## Evidence across folders
 
-A single folder rarely settles a knob. With three runs per setting, the exact test's smallest p is 1/20. So evidence is gathered as e-values, which can be multiplied across folders without losing validity.
+A single folder rarely settles a knob. With three runs per setting, the exact test's smallest p is 1/20. So evidence is gathered as e-values, which can be multiplied across folders without losing validity. An outside review checked this section (Kimi K3, run by hand on 2026-10-06; `docs/evidence.consult.md` and `docs/evidence.consult.response.md`). Its four fixes are in.
 
-- **Per folder:** a permutation e-value. Let S be the share of (low-setting run, high-setting run) pairs that move in the declared direction, ties counting half. The e-value is exp(λS) divided by its average over every relabeling of the pooled runs into groups of the same sizes, with λ = 8 fixed before any data. If the knob does nothing, the runs are exchangeable and the e-value averages exactly 1 (Koning 2023, arXiv:2310.01153, e-values for exchangeability).
-  - A clean three-against-three separation gives 9.53.
-  - A reversal gives about 0.003.
-  - One run against one run gives at most 2.
-  - A messy folder gives less than 1, so it costs evidence.
-- **Across folders:** the e-values are multiplied, oldest folder first. A product of e-values from new, independent runs stays valid when the decision to run another folder depended on earlier ones (Grünwald, de Heide and Koolen 2024, "Safe testing", JRSS-B 86(5); Ramdas, Grünwald, Vovk and Shafer 2023, arXiv:2210.01948). Ville's inequality then bounds the chance the product ever reaches 1/α under no effect.
-  - The folder a hypothesis was proposed on is left out, because its data shaped the claim.
+- **Per folder: a permutation e-value.**
+  - Let S be the share of (low-setting run, high-setting run) pairs that move in the declared direction, ties counting half.
+  - The e-value is exp(λS) divided by its average over every relabeling of the pooled runs into groups of the same sizes. If the knob does nothing, the runs are exchangeable and the e-value averages exactly 1 (Koning 2023, arXiv:2310.01153).
+  - λ comes from a table of group sizes, fixed at design time. Each entry maximizes the expected log e-value under a one-standard-deviation shift, by simulation:
+    - 1 against 1: λ = 1
+    - 2 against 2: λ = 3
+    - 3 against 3: λ = 4
+    - 5 against 5: λ = 8
+  - A single fixed λ = 8 lost evidence on average for folders up to 2 against 3, even under a real effect.
+  - With the table, a clean three-against-three separation gives 4.51, and one run against one gives at most 1.46.
+  - Validity needs runs assigned to a setting independently of anything else that moves the loss. "Everything else equal" carries that assumption; assigning settings at random would guarantee it.
+- **Across folders.** The e-values are multiplied, oldest folder first. A product of e-values from new, independent runs stays valid even when the decision to run another folder depended on earlier ones (Grünwald, de Heide and Koolen 2024, "Safe testing", JRSS-B 86(5); Ramdas, Grünwald, Vovk and Shafer 2023, arXiv:2210.01948).
+  - A folder holding any run RunForge knew when the hypothesis was registered is left out. Any of those runs may have shaped the claim, not only the folder it was proposed on. Runs seen outside RunForge are beyond what the program can know.
   - A folder that shares a run with one already counted is left out. A run's identity is its seed plus a hash of its first 32 samples, so a run that kept training is the same run.
   - A folder tested again keeps its place, so which folders count never depends on their results.
-- **The verdict:** e-BH at a 5% false discovery rate across every hypothesis on the bench (Wang and Ramdas 2022, JRSS-B 84(3)), which holds under any dependence.
-  - Each hypothesis's e-value is the average of its two products, for and against. Each product is an e-value, and so is their average.
-  - A discovered hypothesis is supported when the evidence for outweighs the evidence against, and refuted otherwise. That direction call is not separately error-controlled.
-  - One hypothesis alone needs 20. Two clean three-against-three folders give about 45.
+- **The verdict.** e-BH at a 5% false discovery rate over the 2K directional e-values of the K hypotheses on the bench: each hypothesis's evidence for and evidence against (Wang and Ramdas 2022, JRSS-B 84(3)).
+  - A discovered "for" is supported; a discovered "against" is refuted. Both are directional discoveries held to the same rate, under any dependence.
+  - One direction alone needs 2K/0.05: 40 for a bench of one hypothesis, about three clean three-against-three folders.
+- **Checkpoints.** e-BH is a batch procedure. Re-running it as the bench grows would let the reporting moment be chosen, so verdicts are issued only at checkpoints, one every five new folders, a schedule fixed in advance.
+  - A checkpoint judges every hypothesis registered by then, and its verdicts are final for that checkpoint.
+  - Between checkpoints the report shows the evidence so far, not a verdict.
   - Each folder still shows its own exact-test result, labeled "on these runs alone".
 
-Tests pin the exact average of 1 over every relabeling, including with ties. Two simulations check the rest. Under no effect, the product crosses 20 in at most 5% of 4,000 eight-folder sequences. Under a real shift, four folders usually pass.
+Tests pin the exact average of 1 over every relabeling, including with ties and unequal groups. Two simulations check the rest. Under no effect, the product crosses 20 in at most 5% of 4,000 eight-folder sequences. Under a real shift, four folders usually pass 40.
 
 ## Deferred
 
