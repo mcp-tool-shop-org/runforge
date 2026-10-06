@@ -16,7 +16,7 @@ export default defineConfig({
         src: './src/assets/logo.png',
         alt: 'RunForge',
         href: '/runforge/',
-        replacesTitle: false,
+        replacesTitle: true,
       },
       disable404Route: true,
       social: [
