@@ -4,10 +4,9 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/runforge/readme.png" alt="RunForge" width="720"></p>
 
-<p align="center"><img src="docs/bench-dark.png" alt="The history bench in the dark theme, open on a fixture folder" width="720"></p>
-
 <p align="center">
   <a href="https://github.com/mcp-tool-shop-org/runforge/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/runforge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/mcp-tool-shop-org/runforge"><img src="https://codecov.io/gh/mcp-tool-shop-org/runforge/graph/badge.svg" alt="Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License"></a>
   <a href="https://mcp-tool-shop-org.github.io/runforge/"><img src="https://img.shields.io/badge/Landing_Page-RunForge-blue" alt="Landing page"></a>
   <a href="https://mcp-tool-shop-org.github.io/runforge/handbook/"><img src="https://img.shields.io/badge/Handbook-RunForge-06b6d4" alt="Handbook"></a>
@@ -15,47 +14,90 @@
 
 # RunForge
 
-RunForge é um programa para Windows usado para registrar dados de treinamento. Abra uma pasta. Uma pasta de séries exibe cada amostra armazenada, a receita compartilhada e um relatório em texto simples. Uma pasta de retropropagação abre o histórico: a lista de execuções, a perda armazenada, uma comparação de duas linhas e a exportação.
+RunForge é um instrumento para Windows, utilizado para ajustar finamente as execuções. Abra uma pasta de execuções e ele exibirá cada amostra armazenada, criará um relatório que começará com sua conclusão e fornecerá um ambiente de trabalho para um modelo local. No ambiente de trabalho, o modelo cria suas próprias ferramentas de fórmula, propõe a função de cada parâmetro e coleta evidências em várias pastas até que se chegue a uma conclusão.
 
-A imagem acima é o histórico. Uma pasta de séries é uma tela diferente.
+RunForge lê os registros de treinamento. Ele não realiza o treinamento. Ele não baixa um modelo, não instala o PyTorch nem acessa um modelo na nuvem.
 
-A retropropagação é o treinador. Este aplicativo não contém o treinador, não baixa um modelo e não inclui o PyTorch. Quando `backprop` já estiver no PATH, os comandos "Treinar", "Avaliar" e "Exportar modelo" no histórico iniciarão esse comando e seguirão seu log. Os argumentos são criados pelo aplicativo. Nada é passado por meio de um shell. Se `backprop` estiver faltando, os botões indicarão isso. RunForge não baixa, instala ou inclui a retropropagação.
+## O relatório
 
-## Uma pasta de séries
+Abra uma pasta de arquivos `run-config*.json`. Eles podem estar na própria pasta ou em um nível abaixo. RunForge exibe cada amostra finita, sem reamostragem, e uma lacuna permanece uma lacuna. `training_summary.final_loss` é um marcador ao lado da curva, nunca um ponto nela, e o relatório nunca classifica com base nele.
 
-O arquivo é `run-config*.json` na pasta que você abre, e os mesmos nomes estão um nível abaixo, em uma pasta filha. RunForge não procura mais a fundo e não pesquisa o disco. Um arquivo inválido é ignorado e contabilizado. Uma chave duplicada rejeita apenas esse arquivo.
+O relatório começa com **Em resumo**: se uma execução é bem-sucedida e por quê. Para cinco conjuntos de dados de uma mesma configuração, o relatório pode apresentar algo como:
 
-Cada amostra permanece como um registro: a época ou o passo, a perda, a taxa de aprendizado e todos os outros campos que foram registrados. Cada amostra finita é exibida. A visualização não é reamostrada. Uma perda nula ou não finita é uma lacuna, não um zero. `training_summary.final_loss`, quando o arquivo o tiver, é um marcador ao lado da curva. Não é anexado à linha, e o relatório não é classificado por ele.
+> Nenhuma execução é bem-sucedida. O conjunto de dados 512 tem o ponto único mais profundo, 0,0674 na época 3. O conjunto de dados 1024 tem o período mais estável em torno de seu valor mínimo: uma média de 0,3474, em comparação com 0,4041 em torno do valor mínimo do conjunto de dados 512. As médias das execuções estão a uma distância de 0,1508 umas das outras: maior do que a metade do período mais estável (0,1133), menor do que o período mais instável (0,3238). As execuções se separam apenas parcialmente.
 
-O relatório secundário imprime um relatório com base nessas medições. O painel e "Salvar relatório" são as mesmas palavras. "Salvar" usa a mesma caixa de diálogo da exportação do histórico. A opção "Perguntar" pode adicionar uma breve nota sobre como ler a página. Essa nota pode não conter um dígito, nomear uma configuração ou nomear um resultado. Uma nota que ultrapassa o limite é descartada, e o painel indica isso. Se nenhum modelo local responder, o relatório ainda será gerado.
+Depois disso, o relatório detalha:
+- as execuções
+- por que uma é bem-sucedida ou nenhuma o é
+- o que mudou e o que não mudou
+- avaliações anteriores da mesma configuração
+- o que fazer a seguir
+- o que o relatório não pode informar
+- de onde vem cada fórmula
 
-O modelo, quando solicitado, é um Ollama local na porta `127.0.0.1` e `11434`. Um nome marcado como "nuvem" não é escolhido. O relatório secundário não pressiona o botão "Treinar". A pergunta não inclui o caminho da pasta. Uma nota mantida permanece com as preferências. Não é reescrita nos arquivos de séries.
+Uma seção sem informações relevantes não será impressa. Uma configuração que foi a mesma em todas as execuções será listada como não testada, nunca como um parâmetro. O painel e o botão "Salvar relatório" contêm as mesmas informações.
 
-## O histórico
+## O ambiente de trabalho
 
-Abra a pasta que contém `run_history.json` ou a pasta acima de um diretório `output`. O arquivo na pasta aberta é usado quando ambos existem. A janela lista as execuções, exibe a perda armazenada, compara duas linhas e exporta a tabela ou a curva.
+Pressione **Perguntar** e um modelo local investigará as execuções por meio de cinco ferramentas: medir uma fórmula, comparar um parâmetro que mudou, manter uma nova ferramenta, propor uma hipótese e finalizar. O programa calcula cada resultado e escreve cada frase que contém um número. O modelo escolhe o que analisar e expressa isso em palavras. Sua nota final é rotulada como suas palavras, não como uma medição.
 
-A curva é o `loss_history` armazenado, em ordem de arquivo, no máximo o número de amostras que o treinador manteve. `final_loss` é uma coluna. Não é anexado à linha. Uma amostra nula é uma lacuna, não um zero.
+**Ferramentas que o modelo cria.** Uma ferramenta é uma fórmula em uma linguagem simples, avaliada uma vez por execução, por exemplo:
+- `last / low`: quão longe a curva sobe após seu ponto mais baixo
+- `slope_between(end_epoch - 1, end_epoch)`: quão íngreme é a última época
+- `knob('lora_r')`: um valor de configuração
 
-Os comandos "Treinar", "Avaliar" e "Exportar modelo" permanecem nesta tela. Eles não estão na tela de séries.
+Uma fórmula não pode ler um arquivo, abrir a rede ou executar código. Uma nova ferramenta é mantida apenas se fornecer um valor em cada execução e não for uma duplicata. Ela permanece provisória até ser usada em uma segunda pasta. Fórmulas posteriores podem usá-la pelo nome, para que a biblioteca cresça com os dados. Você pode testar uma fórmula no painel, na caixa de fórmula.
+
+**Hipóteses sobre parâmetros.** Uma hipótese nomeia um parâmetro, uma fórmula e uma direção, por exemplo, "quando a classificação LoRA aumenta, `last / low` diminui". Seu teste é fixo quando é proposto. Em cada pasta, o programa marca como:
+- não testável: o parâmetro não mudou
+- confuso: outro parâmetro mudou junto com ele
+- inconclusivo
+- ou um resultado apenas nessas execuções
+
+Quando as execuções não conseguem validar uma hipótese, RunForge planeja o menor conjunto de execuções que: um parâmetro, duas configurações, três conjuntos de dados ou mais cada. Ele nunca as inicia.
+
+**Evidências em várias pastas.** Cada pasta fornece um valor e: uma medida de evidência que tem uma média exatamente de 1 quando o parâmetro não tem efeito, para que possa ser multiplicada em várias pastas sem perder validade. Dois tipos de pasta são excluídos:
+- qualquer pasta que contenha uma execução que o RunForge já tenha visto quando a hipótese foi registrada
+- uma execução já contada
+
+Conclusões, confirmadas ou refutadas, são emitidas apenas em pontos de verificação, um a cada cinco novas pastas. Cada ponto de verificação aplica o e-BH em uma taxa de descoberta falsa de 5% em ambas as direções de cada hipótese no ambiente de trabalho. Uma única hipótese precisa de cerca de três pastas limpas de três execuções por configuração. O método, suas fontes e uma revisão externa estão em [docs/sidecar-workbench.md](docs/sidecar-workbench.md) e [docs/evidence.consult.response.md](docs/evidence.consult.response.md).
+
+O modelo é um Ollama local em `127.0.0.1:11434`. RunForge usa apenas um modelo que o Ollama relata que pode chamar ferramentas e ignora nomes marcados como da nuvem. Uma sessão é limitada a seis solicitações e dez chamadas de ferramentas. Sem um modelo local, o relatório ainda é válido, assim como a caixa de fórmula.
+
+## O ambiente de histórico
+
+Uma pasta com um backpropagate `run_history.json` abre o ambiente de histórico, ou a pasta acima de um diretório `output`. O ambiente lista as execuções, exibe os `loss_history` armazenados em ordem de arquivo, compara duas linhas e exporta a tabela ou a curva.
+
+Quando `backprop` já está no PATH, os botões "Treinar", "Avaliar" e "Exportar modelo" iniciam esse comando e acompanham seu log. O aplicativo cria os argumentos e nada passa por um shell. Se `backprop` estiver faltando, os botões indicam isso. RunForge não baixa, instala ou fornece o backpropagate.
+
+<p align="center"><img src="docs/bench-dark.png" alt="The history bench in the dark theme, open on a fixture folder" width="720"></p>
 
 ## Modelo de ameaças
 
-RunForge lê uma pasta que você seleciona. Uma pasta de histórico é aberta `run_history.json` lá, ou `output/run_history.json` um nível abaixo. Uma pasta de séries é aberta `run-config*.json` nessa pasta e em seus filhos imediatos. O aplicativo não percorre o restante do disco e não mescla os dois tipos de registro. "Exportar" e "Salvar relatório" gravam em um caminho que você seleciona. As preferências, a última pasta e o tema são gravados no pacote LocalState quando o aplicativo é empacotado e ao lado do arquivo executável quando não é.
+**O que ele lê.** Uma pasta que você seleciona:
+- uma pasta de histórico: `run_history.json` lá, ou `output/run_history.json` um nível abaixo
+- uma pasta de série: `run-config*.json` lá e em seus filhos imediatos
 
-Os comandos "Treinar", "Avaliar" e "Exportar modelo" iniciam `backprop` somente quando você pressiona o botão no histórico e esse programa já está no PATH. O log é a saída desse programa. "Parar" encerra a árvore de processos que esta janela iniciou. O relatório secundário não pressiona esses botões.
+Ele não percorre o restante do disco e nunca grava de volta nesses arquivos. Exportar e Salvar relatório gravam em um caminho que você seleciona.
 
-O relatório secundário pode se conectar a um servidor de modelo no endereço de loopback. O manifesto do pacote não solicita `internetClient`. Não há telemetria e não há conta. A lista de referência do relatório está dentro do programa. Não é obtida externamente.
+**O que ele mantém.** Preferências (a última pasta e o tema) e `sidecar-memory.json` ficam juntos: no LocalState do pacote quando o aplicativo é empacotado e ao lado do executável quando não é. O arquivo de memória não contém nenhum caminho de pasta. Ele contém:
+- as notas do modelo
+- cada avaliação medida
+- as ferramentas de fórmula aprendidas (no máximo 50)
+- as hipóteses com seus resultados de teste (no máximo 60)
+- os pontos de verificação
 
-Dados que não são alterados: o treinador, um download de modelo, uma instalação de retropropagação, um shell, uma cópia do ambiente, um modelo em nuvem ou uma reescrita nos arquivos de séries ou `run_history.json`.
+**O que é enviado para o modelo local.** Os nomes das execuções, os valores da receita e os resultados das ferramentas do programa são enviados para a porta de loopback `11434`. O caminho da pasta não é enviado. O modelo pode chamar apenas as cinco ferramentas da estação de trabalho, e o programa valida cada chamada.
 
-As permissões permanecem na pasta que você abriu, no caminho de exportação que você seleciona, no arquivo de dados que você seleciona, no arquivo de preferências e na porta de loopback `11434` quando você solicita o modelo local.
+**O que é iniciado.** O início do treinamento, da avaliação e da exportação do modelo `backprop` ocorre apenas quando você pressiona o botão na estação de trabalho e o programa já está no PATH. A função "Parar" encerra a árvore de processos iniciada por esta janela. O programa auxiliar nunca pressiona esses botões.
+
+**O que nunca é acessado.** O manifesto do pacote não solicita `internetClient`. Não há telemetria nem conta, e a lista de referências do relatório é incorporada ao programa. O aplicativo não possui um modelo na nuvem, nem um shell, nem uma cópia do ambiente, nem um treinador, nem um download de modelo.
 
 Como relatar uma vulnerabilidade está em [SECURITY.md](SECURITY.md).
 
 ## Compilação
 
-Rust 1.98.1, edição 2024. O arquivo da cadeia de ferramentas fixa essa versão.
+Rust 1.98.1, edição 2024. O arquivo da cadeia de ferramentas fixa esta versão.
 
 ```bash
 cargo test --locked --workspace
@@ -63,12 +105,18 @@ cargo llvm-cov --locked --workspace --all-targets --lcov --output-path lcov.info
 cargo run -p runforge --locked
 ```
 
-O CI executa o comando de cobertura e carrega `lcov.info`. O Codecov falha no status quando a cobertura de linha estiver abaixo de 90%. A caixa de diálogo de arquivo não é aberta pelos testes.
+Limites de cobertura:
+- O CI falha se a cobertura de linhas for inferior a 90%.
+- O Codecov mantém tanto o projeto quanto as novas linhas de cada solicitação de pull em 90%.
+
+Os testes executam o loop do modelo em relação a um Ollama simulado na porta de loopback. Uma sessão em relação a um modelo local real é opcional:
+
+```bash
+RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge --features live live_workbench -- --nocapture
+```
 
 ## Loja
 
-A listagem publicada é o produto `9PHL1HX0CGMF`, o pacote `mcp-tool-shop.RunForge-Desktop`. A versão 2 substitui o aplicativo de classificação anterior, e o texto da listagem deve indicar isso na mesma submissão. Este repositório ainda não contém esse pacote. A identidade do pacote não muda quando o pacote é compilado.
-
-O projeto de referência é [docs/CONTRACT.md](docs/CONTRACT.md). Este repositório oferece suporte à compilação da fonte 2.0.0. O aplicativo da Loja publicado permanece na versão 1.0.1 até que um pacote acima de `1.0.1.0` seja enviado.
+O anúncio publicado é o produto `9PHL1HX0CGMF`, pacote `mcp-tool-shop.RunForge-Desktop`. A versão 2 substitui o aplicativo de classificação anterior, e o texto do anúncio deve indicar isso na mesma submissão. O aplicativo da Loja publicado permanece na versão 1.0.1 até que um pacote acima de `1.0.1.0` seja submetido. O projeto de referência está em [docs/CONTRACT.md](docs/CONTRACT.md).
 
 Criado por [MCP Tool Shop](https://mcp-tool-shop.github.io/).

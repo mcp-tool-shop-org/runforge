@@ -3,7 +3,7 @@ import type { SiteConfig } from '@mcptoolshop/site-theme';
 export const config: SiteConfig = {
   title: 'RunForge',
   description:
-    'Windows instrument for a training record. A series folder draws every sample and a plain-text report. A backpropagate folder opens the history bench. It does not contain the trainer.',
+    'Windows instrument for fine-tuning runs. It draws every stored sample, writes a report that leads with its answer, and gives a local model a workbench to build formula tools and test what each knob does, with evidence gathered across folders.',
   logoBadge: 'RF',
   brandName: 'RunForge',
   repoUrl: 'https://github.com/mcp-tool-shop-org/runforge',
@@ -11,25 +11,25 @@ export const config: SiteConfig = {
     'MIT Licensed — built by <a href="https://mcp-tool-shop.github.io/" style="color:var(--color-muted);text-decoration:underline">MCP Tool Shop</a>',
 
   hero: {
-    badge: 'Windows · source build 2.0.0',
-    headline: 'Read the run, then weigh it',
-    headlineAccent: 'not the trainer.',
+    badge: 'Windows · local model only',
+    headline: 'Find out what your knobs',
+    headlineAccent: 'actually do.',
     description:
-      'Open one folder. A series folder draws every stored sample, the shared recipe, and a report written from those measurements. A backpropagate folder opens the history bench. Train starts <code>backprop</code> only when that program is already on PATH, and only from that bench. This app does not download a model and does not ship PyTorch.',
-    primaryCta: { href: '#commands', label: 'See the commands' },
+      'Open a folder of fine-tuning runs. RunForge draws every stored sample and writes a report that starts with the answer. Then a local model works the data through tools the program computes: it builds new formulas, proposes what a knob does, and the evidence gathers across folders until a checkpoint can call it. No cloud model, no download, no trainer inside.',
+    primaryCta: { href: '#workbench', label: 'See the workbench' },
     secondaryCta: { href: 'handbook/', label: 'Read the Handbook' },
     previews: [
       {
-        label: 'Open',
-        code: 'run_history.json\nor output/run_history.json',
+        label: 'In short',
+        code: 'No run wins. Seed 512 has the deepest single point,\n0.0674 at epoch 3. Seed 1024 has the calmest stretch\naround its low. The runs only partly separate.',
       },
       {
-        label: 'Train',
-        code: 'backprop train --data FILE [--model NAME] [--steps N] --output DIR',
+        label: 'A tool the model built',
+        code: 'post_low_recovery = last / low\n# how far the curve climbs after its low',
       },
       {
-        label: 'Eval and export',
-        code: 'backprop eval RUN_ID --output DIR\nbackprop export CHECKPOINT --output DIR',
+        label: 'A hypothesis',
+        code: 'When LoRA rank goes up, low goes lower.\nEvidence so far: 20.38 for, 0.006835 against,\nfrom two folders. Next checkpoint in 3 folders.',
       },
     ],
   },
@@ -37,74 +37,107 @@ export const config: SiteConfig = {
   sections: [
     {
       kind: 'features',
-      id: 'series',
-      title: 'A series folder',
-      subtitle: 'Every sample stays. The report is the same words in the pane and in the file.',
+      id: 'report',
+      title: 'The report',
+      subtitle: 'It leads with its answer. Every number in it is measured, and the pane and the saved file are the same words.',
       features: [
         {
-          title: 'The samples, unflattened',
-          desc: 'run-config files in the folder you open, and one level down. Every finite sample is drawn. A gap stays a gap. final_loss is a marker beside the curve, not a point on it.',
+          title: 'In short, first',
+          desc: 'Whether a run wins and why, in two or three sentences, then the runs, the argument, what changed and what did not, and what to do next. A part with nothing to say is not printed.',
         },
         {
-          title: 'One report',
-          desc: 'The sidecar prints the weighing as plain text. Save report writes that string. The lowest sample stays on the page. When the deepest point and the calmest neighborhood disagree, the report says there is no winner.',
+          title: 'Seed noise, measured',
+          desc: 'Each run gets a stretch around its low with a middle and a middle half. The report says whether the gap between runs is smaller than the noise inside one run, or larger.',
         },
         {
-          title: 'A local note, fenced',
-          desc: 'Ask talks to a local model on the loopback address. It does not press Train and it does not call a cloud model. A note with a digit, a setting, or a verdict is dropped, and the pane says so.',
+          title: 'Honest about the recipe',
+          desc: 'A setting that was the same on every run is listed as untested, never as a lever. final_loss is a marker beside the curve, never a rank. The deepest point stays on the page even when it does not win.',
+        },
+      ],
+    },
+    {
+      kind: 'features',
+      id: 'workbench',
+      title: 'The workbench',
+      subtitle: 'A local model investigates through tools. The program computes every result and writes every number.',
+      features: [
+        {
+          title: 'Tools it builds',
+          desc: 'A tool is a formula over the stored samples, such as last / low or slope_between(end_epoch - 1, end_epoch). It is kept only if it has a value on every run and is not a duplicate, and later formulas can use it by name. It cannot read a file or run code.',
+        },
+        {
+          title: 'Hypotheses with a fixed test',
+          desc: 'A hypothesis names a knob, a formula and a direction when it is proposed. The program marks it not testable, confounded, or inconclusive, and plans the smallest set of runs that would settle it. RunForge never starts them.',
+        },
+        {
+          title: 'Evidence across folders',
+          desc: 'Each folder gives an e-value, multiplied across folders of new runs. Verdicts come only at checkpoints, every five new folders, under e-BH at a 5% false discovery rate. The method had an outside review.',
+        },
+      ],
+    },
+    {
+      kind: 'data-table',
+      id: 'verdict',
+      title: 'Verdicts',
+      subtitle: 'How a verdict is earned: what decides a hypothesis, and what never does.',
+      columns: ['', 'Counts', 'Does not count'],
+      rows: [
+        ['Folder', 'New runs, opened after the hypothesis was registered', 'Any run RunForge had already seen'],
+        ['Knob', 'One knob changed, everything else equal', 'A knob that was the same on every run, or one that changed with another'],
+        ['Evidence', 'An e-value per folder, multiplied across folders', 'The model\'s words'],
+        ['Verdict', 'A checkpoint every five new folders, e-BH at 5% over both directions', 'A look at the evidence between checkpoints'],
+        ['Next runs', 'One knob, two settings, three seeds or more each', 'A Train button pressed by the sidecar'],
+      ],
+    },
+    {
+      kind: 'code-cards',
+      id: 'formulas',
+      title: 'Formulas',
+      subtitle: 'Numbers, + - * / ^, parentheses, learned tool names, and the measures RunForge computes per run.',
+      cards: [
+        {
+          title: 'Around the low',
+          code: 'low\nlow_epoch\nmedian   # within half an epoch of the low\nq3 - q1  # its middle half',
+        },
+        {
+          title: 'A window of epochs',
+          code: 'median_between(2, 4)\nslope_between(end_epoch - 1, end_epoch)\nlr_between(0, 1)',
+        },
+        {
+          title: 'Recipe and arithmetic',
+          code: "knob('lora_r')\nlast / low\nmax(low, 0.01) * 2",
         },
       ],
     },
     {
       kind: 'features',
       id: 'bench',
-      title: 'The history bench',
-      subtitle: 'One backpropagate folder. The history file in it. The curve the trainer already stored.',
+      title: 'History bench',
+      subtitle: 'A backpropagate folder opens its own screen: the stored runs, compared and exported.',
       features: [
         {
           title: 'The file you opened',
-          desc: 'Open reads run_history.json in that folder, or output/run_history.json one level down. It does not walk the disk and it does not merge a second file.',
+          desc: 'run_history.json in that folder, or output/run_history.json one level down. It does not walk the disk and it does not merge a second file.',
         },
         {
           title: 'Stored loss, in file order',
-          desc: 'The chart is loss_history as stored. final_loss is a column. It is not appended to the line. A null sample is a gap, not a zero.',
+          desc: 'The chart is loss_history as stored. final_loss is a column, not a point on the line. A null sample is a gap, not a zero.',
         },
         {
           title: 'Compare, export, and launch',
-          desc: 'Compare draws two rows and lists hyperparameters that differ. Export keeps keys the trainer added. Train, Eval, and Export model start an already-installed backprop. Nothing goes through a shell. Stop ends the process tree this window started.',
+          desc: 'Compare two rows and see which settings differ. Train, Eval, and Export model start a backprop that is already installed. Nothing goes through a shell. Stop ends the process tree this window started.',
         },
-      ],
-    },
-    {
-      kind: 'data-table',
-      id: 'boundary',
-      title: 'Where this app stops',
-      subtitle:
-        'The published Store listing is still the 1.0.1 classifier until a later package is submitted.',
-      columns: ['', 'RunForge', 'Not in this app'],
-      rows: [
-        ['History', 'The folder you pick', 'A search of the disk'],
-        ['Series', 'run-config files, one level down', 'A resampled curve, or a rank by final_loss'],
-        ['Report', 'The measurements, saved as the same words', 'A cloud model, or a fetched paper'],
-        ['Curve', 'Stored loss_history', 'final_loss appended as a point'],
-        ['Train, Eval, Export model', 'backprop already on PATH, on the history bench', 'A copy of the trainer, Python, or PyTorch'],
-        ['Stop', 'The process tree this window started', 'A cancel protocol inside backpropagate'],
-        ['Store', 'Same product, source build 2.0.0', 'A submitted 2.0 package'],
       ],
     },
     {
       kind: 'code-cards',
       id: 'commands',
-      title: 'Commands the buttons build',
-      subtitle: 'Blank model and blank steps are left off. Steps, when present, are a positive whole number.',
+      title: 'Commands',
+      subtitle: 'What the history bench buttons build. Blank model and blank steps are left off. Steps, when present, are a positive whole number.',
       cards: [
         {
           title: 'Train',
           code: 'backprop train --data notes.json --model small --steps 12 --output out',
-        },
-        {
-          title: 'Train, defaults kept',
-          code: 'backprop train --data notes.json --output out',
         },
         {
           title: 'Eval',
@@ -119,7 +152,7 @@ export const config: SiteConfig = {
     {
       kind: 'api',
       id: 'sentences',
-      title: 'What the window says',
+      title: 'Sentences',
       subtitle: 'These lines are fixed. The log under them is the child program output.',
       apis: [
         {

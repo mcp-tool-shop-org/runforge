@@ -4,10 +4,9 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/mcp-tool-shop-org/brand/main/logos/runforge/readme.png" alt="RunForge" width="720"></p>
 
-<p align="center"><img src="docs/bench-dark.png" alt="The history bench in the dark theme, open on a fixture folder" width="720"></p>
-
 <p align="center">
   <a href="https://github.com/mcp-tool-shop-org/runforge/actions/workflows/ci.yml"><img src="https://github.com/mcp-tool-shop-org/runforge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/mcp-tool-shop-org/runforge"><img src="https://codecov.io/gh/mcp-tool-shop-org/runforge/graph/badge.svg" alt="Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License"></a>
   <a href="https://mcp-tool-shop-org.github.io/runforge/"><img src="https://img.shields.io/badge/Landing_Page-RunForge-blue" alt="Landing page"></a>
   <a href="https://mcp-tool-shop-org.github.io/runforge/handbook/"><img src="https://img.shields.io/badge/Handbook-RunForge-06b6d4" alt="Handbook"></a>
@@ -15,41 +14,84 @@
 
 # RunForge
 
-RunForge is a Windows instrument for a training record. Open one folder. A series folder draws every stored sample, the shared recipe, and a plain-text report. A backpropagate folder opens the history bench: the run list, the stored loss, a comparison of two rows, and export.
+RunForge is a Windows instrument for fine-tuning runs. Open a folder of runs and it draws every stored sample, writes a report that leads with its answer, and gives a local model a workbench. On the workbench the model builds its own formula tools, proposes what each knob does, and gathers evidence across folders until a verdict is earned.
 
-The picture above is the history bench. A series folder is a different screen.
+RunForge reads training records. It does not train. It does not download a model, ship PyTorch, or call a cloud model.
 
-Backpropagate is the trainer. This app does not contain the trainer, does not download a model, and does not ship PyTorch. When `backprop` is already on PATH, Train, Eval, and Export model on the history bench start that command and follow its log. Arguments are built by the app. Nothing is passed through a shell. If `backprop` is missing, the buttons say so. RunForge does not download backpropagate, install it, or vendor it.
+## The report
 
-## A series folder
+Open a folder of `run-config*.json` files. They can sit in the folder itself or one level down. RunForge draws every finite sample, with no resampling, and a gap stays a gap. `training_summary.final_loss` is a marker beside the curve, never a point on it, and the report never ranks by it.
 
-The file is `run-config*.json` in the folder you open, and the same names one level down in a child folder. RunForge does not look further down and does not search the disk. One bad file is skipped and counted. A duplicate key refuses that file only.
+The report opens with **In short**: whether a run wins, and why. For five seeds of one recipe that reads like this:
 
-Each sample stays a record: the epoch or the step, the loss, the learning rate, and every other field that was logged. Every finite sample is drawn. The view is not resampled. A null or non-finite loss is a gap, not a zero. `training_summary.final_loss`, when the file has it, is a marker beside the curve. It is not appended to the line, and the report does not rank by it.
+> No run wins. Seed 512 has the deepest single point, 0.0674 at epoch 3. Seed 1024 has the calmest stretch around its low: a middle of 0.3474, against 0.4041 around seed 512's low. The runs' middles sit within 0.1508 of each other: wider than the calmest run's middle half (0.1133), narrower than the noisiest run's (0.3238). The runs only partly separate.
 
-The sidecar prints one report from those measurements. The pane and Save report are the same words. Save uses the same dialog as the history export. Ask may add one short note on how to read the page. That note may not contain a digit, name a setting, or name a verdict. A note that crosses the line is dropped, and the pane says so. If no local model answers, the report still stands.
+After that, the report sets out:
+- the runs
+- why one wins or none does
+- what changed and what did not
+- earlier weighings of the same recipe
+- what to do next
+- what the report cannot tell you
+- where each formula comes from
 
-The model, when you ask, is a local Ollama on `127.0.0.1` port `11434`. A name tagged as cloud is not chosen. The sidecar does not press Train. The question does not include the folder path. A kept note stays with the preferences. It is not written back into the series files.
+A section with nothing to say is not printed. A setting that was the same on every run is listed as untested, never as a lever. The pane and Save report hold the same words.
+
+## The workbench
+
+Press **Ask** and a local model investigates the runs through five tools: measure a formula, compare a knob that changed, keep a new tool, propose a hypothesis, and finish. The program computes every result and writes every sentence that carries a number. The model chooses what to look at and puts it into words. Its closing note is labeled as its words, not a measurement.
+
+**Tools the model builds.** A tool is a formula in a small language evaluated once per run, for example:
+- `last / low`: how far the curve climbs after its low
+- `slope_between(end_epoch - 1, end_epoch)`: how steep the last epoch is
+- `knob('lora_r')`: a recipe value
+
+A formula cannot read a file, open the network, or run code. A new tool is kept only if it gives a value on every run and isn't a duplicate. It stays provisional until it's used on a second folder. Later formulas can use it by name, so the library grows with the data. You can try a formula yourself in the pane's formula box.
+
+**Hypotheses about knobs.** A hypothesis names a knob, a formula and a direction, for example "when LoRA rank goes up, `last / low` goes lower". Its test is fixed when it is proposed. On each folder the program marks it one of:
+- not testable: the knob did not change
+- confounded: another knob changed with it
+- inconclusive
+- or a result on those runs alone
+
+When the runs cannot settle a hypothesis, RunForge plans the smallest set of runs that would: one knob, two settings, three seeds or more each. It never starts them.
+
+**Evidence across folders.** Each folder gives an e-value: a measure of evidence that averages exactly 1 when the knob does nothing, so it can be multiplied across folders without losing validity. Two kinds of folder are left out:
+- any folder holding a run RunForge had seen when the hypothesis was registered
+- a run already counted
+
+Verdicts, supported or refuted, are issued only at checkpoints, one every five new folders. Each checkpoint applies e-BH at a 5% false discovery rate over both directions of every hypothesis on the bench. A single hypothesis needs about three clean folders of three runs per setting. The method, its sources, and an outside review are in [docs/sidecar-workbench.md](docs/sidecar-workbench.md) and [docs/evidence.consult.response.md](docs/evidence.consult.response.md).
+
+The model is a local Ollama on `127.0.0.1:11434`. RunForge uses only a model that Ollama reports can call tools, and skips cloud-tagged names. A session is capped at six requests and ten tool calls. Without a local model the report still stands, and so does the formula box.
 
 ## The history bench
 
-Open the folder that contains `run_history.json`, or the folder above an `output` directory. The file in the opened folder wins when both exist. The window lists the runs, draws the stored loss, compares two rows, and exports the table or the curve.
+A folder with a backpropagate `run_history.json` opens the history bench instead, or the folder above an `output` directory. The bench lists the runs, draws the stored `loss_history` in file order, compares two rows, and exports the table or the curve.
 
-The curve is the stored `loss_history`, in file order, at most the samples the trainer kept. `final_loss` is a column. It is not appended to the line. A null sample is a gap, not a zero.
+When `backprop` is already on PATH, Train, Eval, and Export model on this bench start that command and follow its log. The app builds the arguments, and nothing passes through a shell. If `backprop` is missing, the buttons say so. RunForge does not download, install, or vendor backpropagate.
 
-Train, Eval, and Export model stay on this screen. They are not on the series screen.
+<p align="center"><img src="docs/bench-dark.png" alt="The history bench in the dark theme, open on a fixture folder" width="720"></p>
 
 ## Threat model
 
-RunForge reads a folder you pick. A history folder opens `run_history.json` there, or `output/run_history.json` one level down. A series folder opens `run-config*.json` in that folder and in its immediate children. The app does not walk the rest of the disk, and it does not merge the two record kinds. Export and Save report write to a path you pick. Preferences, the last folder and the theme, are written in the package LocalState when the app is packaged, and beside the executable when it is not.
+**What it reads.** A folder you pick:
+- a history folder: `run_history.json` there, or `output/run_history.json` one level down
+- a series folder: `run-config*.json` there and in its immediate children
 
-Train, Eval, and Export model start `backprop` only when you press the button on the history bench and that program is already on PATH. The log is that program's output. Stop ends the process tree this window started. The sidecar does not press those buttons.
+It does not walk the rest of the disk, and it never writes back into those files. Export and Save report write to a path you pick.
 
-The sidecar may connect to a model server on the loopback address. The package manifest does not request `internetClient`. There is no telemetry and no account. The report's reference list is inside the program. It is not fetched.
+**What it keeps.** Preferences (the last folder and the theme) and `sidecar-memory.json` sit together: in the package's LocalState when the app is packaged, and beside the executable when it is not. The memory file holds no folder path. It holds:
+- the model's notes
+- each measured weighing
+- the learned formula tools (at most 50)
+- the hypotheses with their test results (at most 60)
+- the checkpoints
 
-Data it does not touch: the trainer, a model download, an install of backpropagate, a shell, a copy of the environment, a cloud model, or a write back into the series files or `run_history.json`.
+**What reaches the local model.** Run names, recipe values, and the program's own tool results go to loopback port `11434`. The folder path does not. The model can call only the five workbench tools, and the program validates every call.
 
-Permissions stay on the folder you opened, the export path you pick, the data file you pick, the preferences file, and loopback port `11434` when you ask the local model.
+**What it starts.** Train, Eval, and Export model start `backprop` only when you press the button on the history bench and the program is already on PATH. Stop ends the process tree this window started. The sidecar never presses those buttons.
+
+**What it never touches.** The package manifest does not request `internetClient`. There is no telemetry and no account, and the report's reference list is built into the program. The app has no cloud model, no shell, no copy of the environment, no trainer, and no model download.
 
 How to report a vulnerability is in [SECURITY.md](SECURITY.md).
 
@@ -63,12 +105,18 @@ cargo llvm-cov --locked --workspace --all-targets --lcov --output-path lcov.info
 cargo run -p runforge --locked
 ```
 
-CI runs the coverage command and uploads `lcov.info`. Codecov fails the status when line coverage is under 90%. The file dialog is not opened by the tests.
+Coverage gates:
+- CI fails under 90% line coverage.
+- Codecov holds both the project and each pull request's new lines to 90%.
+
+The tests run the model loop against a fake Ollama on loopback. A session against a real local model is opt-in:
+
+```bash
+RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge --features live live_workbench -- --nocapture
+```
 
 ## Store
 
-The published listing is product `9PHL1HX0CGMF`, package `mcp-tool-shop.RunForge-Desktop`. Version 2 replaces the earlier classifier app, and the listing text has to say so in the same submission. This repository does not contain that package yet. The package identity does not change when the package is built.
-
-The design of record is [docs/CONTRACT.md](docs/CONTRACT.md). This repository supports the 2.0.0 source build. The published Store app stays the 1.0.1 classifier until a package above `1.0.1.0` is submitted.
+The published listing is product `9PHL1HX0CGMF`, package `mcp-tool-shop.RunForge-Desktop`. Version 2 replaces the earlier classifier app, and the listing text has to say so in the same submission. The published Store app stays the 1.0.1 classifier until a package above `1.0.1.0` is submitted. The design of record is [docs/CONTRACT.md](docs/CONTRACT.md).
 
 Built by [MCP Tool Shop](https://mcp-tool-shop.github.io/).

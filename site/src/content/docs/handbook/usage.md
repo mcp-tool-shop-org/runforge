@@ -1,6 +1,6 @@
 ---
 title: Usage
-description: How a series folder, the report, the history bench, and the three launch buttons behave.
+description: How a series folder, the report, the workbench pane, the history bench, and the three launch buttons behave.
 sidebar:
   order: 2
 ---
@@ -19,19 +19,31 @@ The shared recipe is shown whole: the keys whose values agree across the series,
 
 ## The report
 
-The sidecar prints one plain-text report from the measurements. The pane shows that text. Save report writes the same string, through the same dialog the history bench uses for CSV and JSON. The report does not use markdown headings.
+The sidecar prints one plain-text report from the measurements. The pane shows that text, and Save report writes the same string through the same dialog the history bench uses for CSV and JSON. The report does not use markdown.
 
-The report keeps the lowest stored loss on the page even when that point does not win. It weighs the half epoch around each low, and it states the learning rate on that sample. When the deepest point and the calmest neighborhood belong to different series, the report says there is no winner. That is a result of weighing. It is not a missing page.
+It opens with **In short**: whether a run wins, and why. The parts below that support the answer, and a part with nothing to say is not printed:
 
-Shared settings are listed as untested. An assumption is labeled, and it is not a result. The report cites only the reference cards a printed sentence uses. The longer list in the column stays closed. Nothing on this page is fetched.
+- **What happened**: where the losses started and ended, and where each run's lowest point fell.
+- **The runs**: one block per run with the following.
+  - Its deepest point and the learning rate there.
+  - Its stretch: every sample within half an epoch of the low, with the middle and the middle half.
+  - Its last sample, and the `final_loss` marker.
+- **Why no run wins**, or **Why one leads**. When the deepest point and the calmest stretch belong to different runs, there is no winner. That is a result of weighing, not a missing page.
+- **What changed and what did not**: shared settings are listed as untested. An assumption is labeled, and it is not a result.
+- **Earlier weighings**: the same runs, other runs of the same recipe, and other recipes with the same method, with the settings where they differ.
+- **Hypotheses on the bench** and **Learned tools**, when the workbench has any.
+- **What to do next**, **What this report cannot tell you**, and **Where this comes from**. The last of these cites only the reference cards a printed sentence uses.
+
+The report says whether the runs really differ. It compares the gap between the runs' middles with the middle half inside each run. When the gap is smaller than the narrowest middle half, the difference between the runs is smaller than the noise inside one run.
 
 ## The workbench
 
-Ask starts a workbench session on a local model that can call tools. The model looks at the runs, builds at least one formula tool, proposes hypotheses about knobs, and finishes. It calls five tools: measure a formula on every run, compare a knob that changed, keep a new formula as a tool, propose a hypothesis, and finish. The program computes every answer. The model's closing note is shown as its words, not a measurement, and is dropped if it carries a digit, markdown or a verdict word.
+**Ask** starts a session on a local model. The **Workbench** section of the pane holds:
+- the formula box
+- the last session's calls, each with the program's answer
+- the learned tools, each marked provisional or kept
 
-A formula uses `+ - * / ^`, parentheses, and the measures listed in the reference, such as `low`, `median`, `last`, `slope_between(a, b)` or `knob('lora_r')`. Type one into the formula box and press Run to see its value on every run. A learned tool can be used by name in later formulas. It stays provisional until it is used on a second folder.
-
-A hypothesis names a knob, a formula and a direction, fixed when it is proposed. On each folder the program marks it not testable (the knob did not change), confounded (another knob changed with it), inconclusive, supported, or refuted. Each folder also gives an e-value for each direction, a measure of evidence that can be multiplied across folders. A folder holding any run RunForge had seen when the hypothesis was registered does not count, and a run is counted once. Verdicts come only at checkpoints, one every five new folders: a hypothesis is supported or refuted when its evidence passes e-BH at a 5% false discovery rate over both directions of every hypothesis on the bench, about three clean folders of three runs per setting for one hypothesis alone. Between checkpoints the report shows the evidence so far and what one direction needs. When a hypothesis is not settled, the session proposes the smallest set of runs that would settle it. The app does not start them. Opening a folder retests the stored hypotheses for its method.
+The model's closing note appears labeled "its words, not a measurement". A note that carried a digit or a verdict is replaced by a line saying it was omitted. The [workbench page](../workbench/) covers tools, hypotheses, evidence and checkpoints in full.
 
 ## Before a folder is open
 
