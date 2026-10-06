@@ -239,11 +239,6 @@ pub struct KnobComparison {
 }
 
 impl KnobComparison {
-    /// Vargha and Delaney's A12: the chance a high-setting run is above a low-setting run.
-    pub fn a12(&self) -> f64 {
-        self.pairs_higher / self.pairs as f64
-    }
-
     pub fn inside_noise(&self) -> Option<bool> {
         self.noise.map(|noise| self.gap.abs() <= noise)
     }
@@ -1246,13 +1241,6 @@ pub struct Evidence {
     pub counted: Vec<String>,
     /// Folders left out and why: the one it was proposed on, or one sharing a run with a counted folder.
     pub left_out: Vec<(String, &'static str)>,
-}
-
-impl Evidence {
-    /// The e-value for "the knob moves this measure", either way: the average of the two products.
-    pub fn e_any(&self) -> f64 {
-        (self.e_for + self.e_against) / 2.0
-    }
 }
 
 /// Multiply the folders' e-values, oldest folder first.

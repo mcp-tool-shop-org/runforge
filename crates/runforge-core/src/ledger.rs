@@ -60,27 +60,9 @@ impl Weighed {
         recipe_field(&self.fingerprint, "method")
     }
 
-    /// The recipe fields that changed between these runs. Empty when only the seed did.
-    pub fn varying(&self) -> Vec<String> {
-        recipe_field(&self.fingerprint, "varying")
-            .and_then(|value| value.as_array().cloned())
-            .unwrap_or_default()
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect()
-    }
-
     /// The run with the deepest single sample.
     pub fn deepest(&self) -> Option<&RunMark> {
         self.runs.iter().min_by(|a, b| a.low.total_cmp(&b.low))
-    }
-
-    /// The run with the lowest window middle.
-    pub fn quietest(&self) -> Option<&RunMark> {
-        self.runs
-            .iter()
-            .min_by(|a, b| a.median.total_cmp(&b.median))
     }
 
     /// Lowest and highest window middle.

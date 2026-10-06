@@ -365,11 +365,17 @@ impl Parser {
         }
     }
 
-    fn node(&mut self, depth: usize) -> Result<(), String> {
+    /// Count one part: a number, a name, a call, or an operator.
+    fn part(&mut self) -> Result<(), String> {
         self.nodes += 1;
         if self.nodes > MAX_NODES {
             return Err(format!("A formula has at most {MAX_NODES} parts."));
         }
+        Ok(())
+    }
+
+    /// `depth` counts what a reader sees nest: parentheses, call arguments, and signs.
+    fn deep(&self, depth: usize) -> Result<(), String> {
         if depth > MAX_DEPTH {
             return Err(format!("A formula nests at most {MAX_DEPTH} deep."));
         }
@@ -377,8 +383,8 @@ impl Parser {
     }
 
     fn sum(&mut self, depth: usize) -> Result<Expr, String> {
-        self.node(depth)?;
-        let mut left = self.product(depth + 1)?;
+        self.deep(depth)?;
+        let mut left = self.product(depth)?;
         loop {
             let op = if self.eat('+') {
                 '+'
@@ -387,14 +393,14 @@ impl Parser {
             } else {
                 return Ok(left);
             };
-            let right = self.product(depth + 1)?;
+            self.part()?;
+            let right = self.product(depth)?;
             left = Expr::Binary(op, Box::new(left), Box::new(right));
         }
     }
 
     fn product(&mut self, depth: usize) -> Result<Expr, String> {
-        self.node(depth)?;
-        let mut left = self.unary(depth + 1)?;
+        let mut left = self.unary(depth)?;
         loop {
             let op = if self.eat('*') {
                 '*'
@@ -403,15 +409,16 @@ impl Parser {
             } else {
                 return Ok(left);
             };
-            let right = self.unary(depth + 1)?;
+            self.part()?;
+            let right = self.unary(depth)?;
             left = Expr::Binary(op, Box::new(left), Box::new(right));
         }
     }
 
     fn power(&mut self, depth: usize) -> Result<Expr, String> {
-        self.node(depth)?;
-        let base = self.atom(depth + 1)?;
+        let base = self.atom(depth)?;
         if self.eat('^') {
+            self.part()?;
             let exponent = self.unary(depth + 1)?;
             return Ok(Expr::Binary('^', Box::new(base), Box::new(exponent)));
         }
@@ -419,15 +426,17 @@ impl Parser {
     }
 
     fn unary(&mut self, depth: usize) -> Result<Expr, String> {
-        self.node(depth)?;
+        self.deep(depth)?;
         if self.eat('-') {
+            self.part()?;
             return Ok(Expr::Neg(Box::new(self.unary(depth + 1)?)));
         }
-        self.power(depth + 1)
+        self.power(depth)
     }
 
     fn atom(&mut self, depth: usize) -> Result<Expr, String> {
-        self.node(depth)?;
+        self.deep(depth)?;
+        self.part()?;
         match self.peek().cloned() {
             Some(Token::Number(value)) => {
                 self.at += 1;
@@ -823,6 +832,114 @@ mod tests {
         assert_eq!(
             canonical(&parse("low/first").unwrap()),
             canonical(&parse(" low / first ").unwrap())
+        );
+    }
+
+    #[test]
+    fn every_measure_evaluates_on_a_run() {
+        // Samples: (0, 8), (1, 4), (2, 2), (2.4, 1), (3, 1.5); learning rates 1e-4 .. 0.
+        let near = |text: &str, want: f64| {
+            let got = value(text);
+            assert!((got - want).abs() < 1e-9, "{text}: {got} != {want}");
+        };
+        near("median", 1.5);
+        near("q1", 1.25);
+        near("q3", 1.75);
+        near("first", 8.0);
+        near("last", 1.5);
+        near("samples", 5.0);
+        near("end_epoch", 3.0);
+        near("peak_lr", 0.0001);
+        near("lr_at_low", 0.00001);
+        near("median_between(0, 1)", 6.0);
+        near("mean_between(1, 0)", 6.0);
+        near("min_between(2, 3)", 1.0);
+        near("lr_between(0, 1)", 0.0001);
+        near(
+            "abs(-2) + sqrt(4) + ln(exp(1)) + min(3, 1) + max(1, 2, 5)",
+            2.0 + 2.0 + 1.0 + 1.0 + 5.0,
+        );
+        near("1e-3 * 1000 + 2.5E+1", 26.0);
+    }
+
+    #[test]
+    fn each_refusal_says_what_is_wrong() {
+        let refused = |text: &str, says: &str| {
+            let error = parse(text).unwrap_err();
+            assert!(error.contains(says), "{text}: {error}");
+        };
+        refused("low )", "text after its end");
+        refused("knob('lora-r')", "letters, digits and _ only");
+        refused("knob('lora_r", "not closed");
+        refused("(low + 1", "parenthesis is not closed");
+        refused("max(low last)", "needs a comma");
+        refused("median_between", "needs arguments in parentheses");
+        refused("low(1)", "takes no arguments");
+        refused("abs()", "takes one argument");
+        refused("max(1)", "takes 2 to 8 arguments");
+        refused("knob(1)", "quoted recipe name");
+        refused(&vec!["1"; 70].join("+"), "at most 64 parts");
+        refused(
+            &format!("{}1{}", "(".repeat(20), ")".repeat(20)),
+            "nests at most",
+        );
+        let run = series();
+        let error = |text: &str| eval(&parse(text).unwrap(), &run).unwrap_err();
+        assert!(error("mean_between(7, 9)").contains("no finite loss between"));
+        assert!(error("slope_between(2.4, 2.4)").contains("two positive losses"));
+        assert!(error("min_between(7, 9)").contains("no finite loss"));
+        let mut bare = series();
+        for sample in &mut bare.samples {
+            sample.lr = None;
+        }
+        assert!(
+            eval(&parse("lr_between(0, 3)").unwrap(), &bare)
+                .unwrap_err()
+                .contains("no learning rate")
+        );
+        assert!(
+            eval(&parse("lr_at_low").unwrap(), &bare)
+                .unwrap_err()
+                .contains("learning rate at its low")
+        );
+        assert!(
+            eval(&parse("peak_lr").unwrap(), &bare)
+                .unwrap_err()
+                .contains("no learning rate")
+        );
+        bare.samples.clear();
+        for text in ["low", "median", "first", "last", "end_epoch"] {
+            assert!(eval(&parse(text).unwrap(), &bare).is_err(), "{text}");
+        }
+    }
+
+    #[test]
+    fn learned_names_expand_within_limits() {
+        let library = |name: &str| match name {
+            "a" => Some("b + 1".to_string()),
+            "b" => Some("c + 1".to_string()),
+            "c" => Some("d + 1".to_string()),
+            "d" => Some("e + 1".to_string()),
+            "e" => Some("f + 1".to_string()),
+            "f" => Some("low".to_string()),
+            "wide" => Some(vec!["low"; 30].join("+")),
+            _ => None,
+        };
+        assert!(parse_open("c * 2", &library).is_ok());
+        assert!(parse_open("a", &library).unwrap_err().contains("four deep"));
+        assert!(
+            parse_open("wide + wide + wide + wide + wide", &library)
+                .unwrap_err()
+                .contains("too large")
+        );
+        assert!(
+            parse_open("nothing", &library)
+                .unwrap_err()
+                .contains("not a measure")
+        );
+        assert_eq!(
+            canonical(&parse("-knob('lora_r')").unwrap()),
+            "-(knob('lora_r'))"
         );
     }
 }

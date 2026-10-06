@@ -452,3 +452,105 @@ fn evidence_gathers_across_folders_until_a_checkpoint_decides() {
 fn evidence_of(h: &runforge_core::Hypothesis) -> runforge_core::Evidence {
     runforge_core::evidence(h)
 }
+
+#[test]
+fn checkpoints_and_the_tool_cap_survive_a_round_trip() {
+    use runforge_core::{Book, LearnedTool, note_new_folder, read_book, write_book};
+    let dir = scratch("book");
+    assert_eq!(read_book(&dir), Book::default());
+    let b = rank_board(&[0.3, 0.32, 0.31], &[0.1, 0.12, 0.11]);
+    let proposal = Proposal {
+        knob: "lora_r",
+        formula: "low",
+        direction: "lower",
+        why: "",
+    };
+    let h = propose(&b, &[], &[], &proposal, "2026-10-06").unwrap();
+    let mut book = Book::default();
+    for _ in 0..runforge_core::CHECKPOINT_EVERY + 2 {
+        note_new_folder(&mut book, std::slice::from_ref(&h), "2026-10-06");
+    }
+    write_book(&dir, &book).unwrap();
+    let back = read_book(&dir);
+    assert_eq!(back, book);
+    assert_eq!(back.since, 2);
+    assert_eq!(back.until_next(), runforge_core::CHECKPOINT_EVERY - 2);
+    assert_eq!(back.latest_for(&h.id).unwrap().1.1.word(), "open");
+    assert!(back.latest_for("h999").is_none());
+
+    // Past the cap, the provisional tool used least is trimmed first.
+    let tool = |n: usize, uses: u32, boards: usize| LearnedTool {
+        name: format!("tool_{n}"),
+        formula: format!("low * {n}"),
+        meaning: "a scaled low".into(),
+        created: "2026-10-06".into(),
+        uses,
+        boards: (0..boards).map(|k| format!("board {k}")).collect(),
+    };
+    let mut tools: Vec<LearnedTool> = (0..50).map(|n| tool(n, 5, 2)).collect();
+    tools.push(tool(50, 0, 1));
+    write_tools(&dir, &tools).unwrap();
+    let kept = read_tools(&dir);
+    assert_eq!(kept.len(), 50);
+    assert!(!kept.iter().any(|t| t.name == "tool_50"));
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn a_test_on_the_wrong_method_or_a_broken_formula_is_not_testable() {
+    let b = rank_board(&[0.3, 0.32, 0.31], &[0.1, 0.12, 0.11]);
+    let proposal = Proposal {
+        knob: "lora_r",
+        formula: "low",
+        direction: "lower",
+        why: "",
+    };
+    let mut h = propose(&b, &[], &[], &proposal, "2026-10-06").unwrap();
+    let mut other = b.clone();
+    other
+        .shared
+        .insert("method".into(), Value::from("full fine-tune"));
+    let (wrong, _) = test_hypothesis(&other, &h, &[], "2026-10-06");
+    assert_eq!(wrong.state, State::Untestable);
+    assert!(wrong.detail.contains("different method"));
+    h.formula = "gone_tool * 2".into();
+    let (broken, _) = test_hypothesis(&b, &h, &[], "2026-10-06");
+    assert_eq!(broken.state, State::Untestable);
+    assert!(broken.detail.contains("not a measure"));
+    // A rank test that does not reach one in twenty stays inconclusive.
+    let h = propose(&b, &[], &[], &proposal, "2026-10-06").unwrap();
+    let mixed = rank_board(&[0.30, 0.10, 0.32], &[0.12, 0.31, 0.105]);
+    let (stays, _) = test_hypothesis(&mixed, &h, &[], "2026-10-06");
+    assert_eq!(stays.state, State::Inconclusive, "{}", stays.detail);
+    for state in [
+        State::Untestable,
+        State::Confounded,
+        State::Inconclusive,
+        State::Supported,
+        State::Refuted,
+    ] {
+        assert!(!state.word().is_empty());
+    }
+    for verdict in [
+        runforge_core::Verdict::Supported,
+        runforge_core::Verdict::Refuted,
+        runforge_core::Verdict::Open,
+    ] {
+        assert!(!verdict.word().is_empty());
+    }
+}
+
+#[test]
+fn a_column_names_the_run_it_could_not_measure_and_known_runs_lists_the_ledger() {
+    let mut b = rank_board(&[0.3, 0.32], &[0.1, 0.12]);
+    b.series[0].samples.clear();
+    let column = evaluate(&b, "low", &[]).unwrap();
+    assert!(column.lines()[0].contains("no value."));
+    let dir = scratch("known");
+    assert!(runforge_core::known_runs(&dir).is_empty());
+    let full = rank_board(&[0.3, 0.32], &[0.1, 0.12]);
+    record_weighing(&dir, &weighed_now(&full, "2026-10-06")).unwrap();
+    record_weighing(&dir, &weighed_now(&full, "2026-10-07")).unwrap();
+    assert_eq!(runforge_core::known_runs(&dir).len(), 4);
+    fs::remove_dir_all(dir).unwrap();
+}

@@ -2098,6 +2098,108 @@ mod tests {
     }
 
     #[test]
+    fn a_finished_session_is_kept_and_drawn_in_the_pane() {
+        let dir = scratch("bench-keep");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        for (seed, rank, low) in [(1, 16, 0.3), (2, 32, 0.1)] {
+            std::fs::write(
+                folder.join(format!("run-config-seed{seed}.json")),
+                format!(
+                    r#"{{"seed": {seed}, "hyperparameters": {{"method": "bf16 LoRA", "lora_r": {rank}}},
+                    "saturation_log": {{"loss_curve": [
+                        {{"epoch": 0.0, "loss": 4.0, "lr": 0.0001}},
+                        {{"epoch": 1.0, "loss": {low}, "lr": 0.0001}},
+                        {{"epoch": 2.0, "loss": 0.5, "lr": 0.0}}]}}}}"#
+                ),
+            )
+            .unwrap();
+        }
+        let prefs = dir.join("prefs");
+        let mut app = RunForgeApp::open(prefs.clone());
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        let board = app.series.clone().unwrap();
+
+        // A session as the model loop would hand it back.
+        let mut bench = runforge_core::Workbench::new(board, Vec::new(), Vec::new(), "2026-10-06")
+            .knowing(vec!["an earlier run".to_string()]);
+        bench.call("measure", &serde_json::json!({"formula": "low"}));
+        bench.call(
+            "learn_tool",
+            &serde_json::json!({"name": "rebound", "formula": "last / low", "meaning": "end over low"}),
+        );
+        bench.call(
+            "propose_hypothesis",
+            &serde_json::json!({"knob": "lora_r", "formula": "rebound", "knob_change": "raise", "formula_moves": "down", "why": "A wider adapter settles."}),
+        );
+        bench.call(
+            "finish",
+            &serde_json::json!({"note": "The rank pair has one run each, so it stays open."}),
+        );
+        app.keep_session("qwen3:14b", &bench, "The model finished.");
+        assert_eq!(runforge_core::read_tools(&prefs).len(), 1);
+        let stored = runforge_core::read_hypotheses(&prefs);
+        assert_eq!(stored.len(), 1);
+        assert!(
+            stored[0]
+                .registered_runs
+                .contains(&"an earlier run".to_string())
+        );
+        assert_eq!(app.sidecar_status, "qwen3:14b: The model finished.");
+
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.starts_with("Last session: 4 calls"))
+        );
+        assert!(texts.iter().any(|text| text == "Learned tools"));
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("rebound = last / low"))
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("its words, not a measurement"))
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("No checkpoint has judged it yet."))
+        );
+        output.drop_without_applying_deltas();
+
+        // A note that crossed the fence is dropped and the pane says so.
+        let mut dropped = runforge_core::Workbench::new(
+            app.series.clone().unwrap(),
+            Vec::new(),
+            Vec::new(),
+            "2026-10-06",
+        );
+        dropped.call(
+            "finish",
+            &serde_json::json!({"note": "Rank wins by 3 points."}),
+        );
+        app.keep_session("qwen3:14b", &dropped, "The model finished.");
+        assert!(app.orientation_blocked);
+        let output = ui.show(&mut app, Vec::new());
+        let texts = Harness::texts(&output);
+        assert!(
+            texts
+                .iter()
+                .any(|text| text.contains("Assistant note omitted"))
+        );
+        output.drop_without_applying_deltas();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn opening_a_folder_retests_the_bench_and_the_formula_box_runs() {
         let dir = scratch("bench-ui");
         let folder = dir.join("runs");

@@ -522,6 +522,95 @@ mod tests {
         }
     }
 
+    fn bench() -> runforge_core::Workbench {
+        runforge_core::Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-06")
+    }
+
+    fn absent(reply: BenchReply) -> String {
+        match reply {
+            BenchReply::Absent(text) => text,
+            BenchReply::Done { stopped, .. } => panic!("expected no session, got: {stopped}"),
+        }
+    }
+
+    fn stopped(reply: BenchReply) -> (String, usize) {
+        match reply {
+            BenchReply::Done { stopped, bench, .. } => (stopped, bench.steps.len()),
+            BenchReply::Absent(text) => panic!("expected a session, got: {text}"),
+        }
+    }
+
+    #[test]
+    fn a_session_says_why_it_could_not_start_or_had_to_stop() {
+        let wait = Duration::from_secs(20);
+        // Ollama is not running: nothing listens on a port just freed.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        assert!(
+            absent(start_bench_on(port, bench()).recv_timeout(wait).unwrap())
+                .contains("not running")
+        );
+
+        // Only models that cannot call tools.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen2.5:7b"}]}"#.to_string(),
+            r#"{"capabilities":["completion"]}"#.to_string(),
+        ]);
+        let text = absent(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert!(text.contains("can call tools"), "{text}");
+        server.join().unwrap();
+
+        // The model answers in prose without calling a tool.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+            r#"{"message":{"role":"assistant","content":"I think rank matters."}}"#.to_string(),
+        ]);
+        let (why, calls) = stopped(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert_eq!(why, "The model answered without calling a tool.");
+        assert_eq!(calls, 0);
+        server.join().unwrap();
+
+        // The server reports an error mid-session.
+        let (port, server) = serve(vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+            r#"{"error":"model is loading"}"#.to_string(),
+        ]);
+        let (why, _) = stopped(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
+        assert_eq!(why, "model is loading");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn a_session_that_runs_out_of_calls_says_so() {
+        let mut bodies = vec![
+            r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
+            r#"{"capabilities":["tools"]}"#.to_string(),
+        ];
+        let many: Vec<String> = (0..runforge_core::MAX_CALLS)
+            .map(|_| r#"{"function":{"name":"measure","arguments":{"formula":"low"}}}"#.to_string())
+            .collect();
+        bodies.push(format!(
+            r#"{{"message":{{"role":"assistant","content":"","tool_calls":[{}]}}}}"#,
+            many.join(",")
+        ));
+        let (port, server) = serve(bodies);
+        let reply = start_bench_on(port, bench())
+            .recv_timeout(Duration::from_secs(20))
+            .unwrap();
+        let (why, calls) = stopped(reply);
+        assert_eq!(
+            why,
+            format!("It used all {} tool calls.", runforge_core::MAX_CALLS)
+        );
+        assert_eq!(calls, runforge_core::MAX_CALLS);
+        server.join().unwrap();
+    }
+
     #[test]
     fn a_workbench_session_runs_the_calls_and_stops_at_finish() {
         let (port, server) = serve(vec![
@@ -559,10 +648,10 @@ mod tests {
         );
     }
 
-    /// Live run against the local Ollama on a real folder. Opt-in:
-    /// RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge live_workbench -- --ignored --nocapture
+    /// Live run against the local Ollama on a real folder. Opt-in, and not built in CI:
+    /// RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge --features live live_workbench -- --nocapture
+    #[cfg(feature = "live")]
     #[test]
-    #[ignore]
     fn live_workbench() {
         let folder = std::env::var("RUNFORGE_LIVE_FOLDER").expect("RUNFORGE_LIVE_FOLDER");
         let board = runforge_core::load_series_folder(std::path::Path::new(&folder)).unwrap();

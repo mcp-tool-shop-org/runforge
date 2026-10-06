@@ -16,5 +16,9 @@ rfd = "0.15"
 runforge-core = { path = "../runforge-core" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
+[features]
+# The opt-in live session test against a local Ollama. Off in CI and coverage.
+live = []
+
 [lints]
 workspace = true
