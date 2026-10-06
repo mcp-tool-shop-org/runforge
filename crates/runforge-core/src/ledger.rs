@@ -110,6 +110,17 @@ impl Ledger {
     }
 }
 
+/// The recipe plus the run names: the same folder opened twice has the same key.
+pub fn board_key(board: &Board) -> String {
+    let mut names: Vec<&str> = board
+        .series
+        .iter()
+        .map(|series| series.name.as_str())
+        .collect();
+    names.sort_unstable();
+    format!("{}\n{}", fingerprint(board), names.join("\n"))
+}
+
 /// The board as weighed today.
 pub fn weighed_now(board: &Board, date: &str) -> Weighed {
     let weighing = weigh(board);

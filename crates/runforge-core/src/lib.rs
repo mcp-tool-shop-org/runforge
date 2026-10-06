@@ -4,8 +4,10 @@
 //! The library does not train, spawn a process, open a window, or call a model.
 //! A bad file is a [`HistoryError`]. It is not a panic.
 
+mod bench;
 mod error;
 mod export;
+mod expr;
 mod history;
 mod ledger;
 mod parse;
@@ -15,13 +17,20 @@ mod series;
 mod time;
 mod weigh;
 
+pub use bench::{
+    ALPHA, Arm, Column, Direction, Evaluation, Experiment, Hypothesis, KnobComparison, LearnedTool,
+    Noise, Proposal, State, board_method, compare_knob, evaluate, exact_p, experiment_for,
+    learn_tool, note_use, propose, read_hypotheses, read_tools, reason_allowed, record, seed_noise,
+    seeds_needed, test as test_hypothesis, test_all, write_hypotheses, write_tools,
+};
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
+pub use expr::{Expr, MEASURES, Measure, canonical, parse as parse_formula};
 pub use history::{
     EvalSummary, History, HyperDiff, LossSample, RunEntry, hyperparameter_diffs, load_bytes,
     load_folder, load_text, pick_best_loss,
 };
-pub use ledger::{Ledger, RunMark, Weighed, ledger_for, record_weighing, weighed_now};
+pub use ledger::{Ledger, RunMark, Weighed, board_key, ledger_for, record_weighing, weighed_now};
 pub use prefs::{PREFS_FILE, Prefs, Theme, choose_prefs_dir, read_prefs, write_prefs};
 pub use report::{
     ORIENTATION_OMITTED, comparison_report, comparison_report_with, is_heading,
