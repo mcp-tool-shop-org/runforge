@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The README, the landing page, and the handbook describe the instrument, the report and the workbench; the handbook gains a workbench page and a reference of hypothesis states, verdicts and limits. Coverage is 93.8% of lines, with each pull request's new lines also held to 90%. No package has been submitted to Partner Center.
 
+The Store package keeps the 1.0.x Application Id, `App`, so an update from the classifier keeps the user's Start and taskbar pins. The pack script refuses a manifest with any other Id.
+
 A formula's limits count what a reader sees: 64 parts (numbers, names, calls, operators) and 16 levels of parentheses, calls and signs. Before, they counted parser steps, so a formula with five functions was refused.
 
 The window is an instrument. A folder of run-config series draws every sample, the shared recipe, and a local sidecar. The row around the lows draws those samples on one linear scale, with a line through the lowest sample of each epoch. A spike above that row stays on the main chart. A backpropagate `run_history.json` still opens the history bench. The sidecar does not press Train and does not call a cloud model. It prints the weighing as one plain-text report, and Save report writes those same words. A local note may add one orientation paragraph only when that paragraph has no digit, no setting, and no verdict. The report weighs each low against the samples around it, cites the local reference cards it actually uses, and labels an assumption so it is not a result. Opening a folder does not replace a stored answer.

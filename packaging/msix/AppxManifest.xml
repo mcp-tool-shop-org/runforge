@@ -28,7 +28,7 @@
   </Resources>
 
   <Applications>
-    <Application Id="RunForge" Executable="runforge.exe" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="App" Executable="runforge.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="RunForge"
         Description="Open a backpropagate run folder and read the stored loss."
