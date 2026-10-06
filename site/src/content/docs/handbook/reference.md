@@ -21,6 +21,10 @@ The report abstains when the lowest stored sample and the calmest half-epoch nei
 
 Each opened series is weighed into the memory file beside the preferences. A later report lists earlier weighings of the same runs, of other runs with the same recipe, and of other recipes with the same method, with the settings where those recipes differ. The same runs with the same numbers keep the day they were first weighed.
 
+## The formula language
+
+A formula is evaluated once per run over its stored samples. It may use numbers, `+ - * / ^`, parentheses, learned tool names, and these measures: `low`, `low_epoch`, `median`, `q1`, `q3` (the window within half an epoch of the low), `first`, `last`, `samples`, `peak_lr`, `lr_at_low`, `end_epoch`, `median_between(a, b)`, `mean_between(a, b)`, `min_between(a, b)`, `count_between(a, b)`, `slope_between(a, b)` (least-squares slope of ln loss per epoch), `lr_between(a, b)`, `knob('name')`, `abs`, `sqrt`, `ln`, `exp`, `min`, and `max`. A formula is at most 240 characters and 64 parts. A value that is not finite on a run is an error, not a result.
+
 ## Argument lists
 
 Train, with a model and a step count:

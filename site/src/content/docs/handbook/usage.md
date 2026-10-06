@@ -25,7 +25,13 @@ The report keeps the lowest stored loss on the page even when that point does no
 
 Shared settings are listed as untested. An assumption is labeled, and it is not a result. The report cites only the reference cards a printed sentence uses. The longer list in the column stays closed. Nothing on this page is fetched.
 
-Ask may add one short paragraph on how to read the page. That paragraph may not contain a digit, name a setting, or name a verdict. A fresh note that crosses the line is dropped, and the pane says the note was omitted. A stored note that crosses the line is not shown. Opening a folder does not replace a richer note. The sidecar does not press Train.
+## The workbench
+
+Ask starts a workbench session on a local model that can call tools. The model looks at the runs, builds at least one formula tool, proposes hypotheses about knobs, and finishes. It calls five tools: measure a formula on every run, compare a knob that changed, keep a new formula as a tool, propose a hypothesis, and finish. The program computes every answer. The model's closing note is shown as its words, not a measurement, and is dropped if it carries a digit, markdown or a verdict word.
+
+A formula uses `+ - * / ^`, parentheses, and the measures listed in the reference, such as `low`, `median`, `last`, `slope_between(a, b)` or `knob('lora_r')`. Type one into the formula box and press Run to see its value on every run. A learned tool can be used by name in later formulas. It stays provisional until it is used on a second folder.
+
+A hypothesis names a knob, a formula and a direction, fixed when it is proposed. On each folder the program marks it not testable (the knob did not change), confounded (another knob changed with it), inconclusive, supported, or refuted. Supported and refuted need an exact rank test at one in twenty after Holm's adjustment, which takes at least three runs per setting. When a hypothesis is not settled, the session proposes the smallest set of runs that would settle it. The app does not start them. Opening a folder retests the stored hypotheses for its method.
 
 ## Before a folder is open
 
