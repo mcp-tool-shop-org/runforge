@@ -155,6 +155,7 @@ pub fn load_series_folder(folder: &Path) -> Result<Board, HistoryError> {
             .then_with(|| left.name.cmp(&right.name))
             .then_with(|| left.file_name.cmp(&right.file_name))
     });
+    disambiguate(&mut series);
     let (shared, varying) = split_recipe(&series);
     Ok(Board {
         series,
@@ -165,6 +166,27 @@ pub fn load_series_folder(folder: &Path) -> Result<Board, HistoryError> {
 }
 
 struct Skip;
+
+/// Two runs with one seed keep apart: each clashing name gains its file's own tag.
+fn disambiguate(series: &mut [Series]) {
+    let names: Vec<String> = series.iter().map(|item| item.name.clone()).collect();
+    for item in series.iter_mut() {
+        if names.iter().filter(|name| **name == item.name).count() < 2 {
+            continue;
+        }
+        let stem = item
+            .file_name
+            .trim_end_matches(".json")
+            .trim_start_matches("run-config")
+            .trim_start_matches(['-', '_']);
+        let tag = if stem.is_empty() {
+            item.file_name.as_str()
+        } else {
+            stem
+        };
+        item.name = format!("{} ({tag})", item.name);
+    }
+}
 
 fn seed_order(seed: Option<i64>) -> (u8, i64) {
     match seed {
@@ -238,11 +260,13 @@ fn load_series_file(path: &Path) -> Result<Series, Skip> {
         .and_then(|name| name.to_str())
         .unwrap_or("run-config.json")
         .to_string();
-    let recipe = object
-        .get("hyperparameters")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
+    let recipe = normalize_recipe(
+        object
+            .get("hyperparameters")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default(),
+    );
     let summary = object
         .get("training_summary")
         .and_then(Value::as_object)
@@ -258,6 +282,49 @@ fn load_series_file(path: &Path) -> Result<Series, Skip> {
         recipe,
         summary,
     })
+}
+
+/// One spelling per knob. Some trainers nest LoRA settings under `lora` and use
+/// short names (`lr`, `schedule`). A canonical key already present wins, and an
+/// alias is never written over it. Unknown keys pass through unchanged.
+pub fn normalize_recipe(mut recipe: Map<String, Value>) -> Map<String, Value> {
+    if let Some(Value::Object(lora)) = recipe.get("lora").cloned() {
+        let mut flattened = true;
+        for (inner, outer) in [
+            ("r", "lora_r"),
+            ("alpha", "lora_alpha"),
+            ("dropout", "lora_dropout"),
+            ("target_modules", "target_modules"),
+        ] {
+            if let Some(value) = lora.get(inner) {
+                if recipe.contains_key(outer) {
+                    flattened = false;
+                } else {
+                    recipe.insert(outer.to_string(), value.clone());
+                }
+            }
+        }
+        if flattened
+            && lora
+                .keys()
+                .all(|key| ["r", "alpha", "dropout", "target_modules"].contains(&key.as_str()))
+        {
+            recipe.remove("lora");
+        }
+    }
+    for (alias, canonical) in [
+        ("lr", "learning_rate"),
+        ("schedule", "lr_scheduler"),
+        ("per_device_train_batch_size", "per_device_batch"),
+        ("gradient_accumulation_steps", "grad_accum"),
+    ] {
+        if !recipe.contains_key(canonical)
+            && let Some(value) = recipe.remove(alias)
+        {
+            recipe.insert(canonical.to_string(), value);
+        }
+    }
+    recipe
 }
 
 fn sample_from(value: &Value) -> Sample {

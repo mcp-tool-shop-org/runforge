@@ -22,7 +22,8 @@ pub use bench::{
     ALPHA, Arm, Column, Direction, Evaluation, Experiment, Hypothesis, KnobComparison, LearnedTool,
     Noise, Proposal, State, board_method, compare_knob, evaluate, exact_p, experiment_for,
     learn_tool, note_use, propose, read_hypotheses, read_tools, reason_allowed, record, seed_noise,
-    seeds_needed, test as test_hypothesis, test_all, write_hypotheses, write_tools,
+    seeds_needed, test as test_hypothesis, test_all, wording_problem, write_hypotheses,
+    write_tools,
 };
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
@@ -39,10 +40,11 @@ pub use report::{
 };
 pub use series::{
     Board, Mark, Reading, Sample, Series, SeriesRead, band_segments, earlier_readings, epoch_floor,
-    fingerprint, format_measure, load_series_folder, loss_segments, low_band, read_board, recall,
-    recipe_keys, recipe_label, recipe_marks, recipe_text, remember, sidecar_prompt, spikes_above,
+    fingerprint, format_measure, load_series_folder, loss_segments, low_band, normalize_recipe,
+    read_board, recall, recipe_keys, recipe_label, recipe_marks, recipe_text, remember,
+    sidecar_prompt, spikes_above,
 };
-pub use session::{MAX_CALLS, MAX_ROUNDS, Step, Workbench};
+pub use session::{MAX_CALLS, MAX_ROUNDS, NOTE_LIMIT, Phase, Step, Workbench};
 pub use weigh::{Card, Neighborhood, Separation, Spread, Weighing, spread, weigh};
 
 pub const VERSION: &str = "2.0.0";

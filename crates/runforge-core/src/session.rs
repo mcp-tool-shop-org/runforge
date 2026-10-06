@@ -15,15 +15,77 @@ use serde_json::{Value, json};
 
 use crate::bench::{
     Hypothesis, LearnedTool, Proposal, State, compare_knob, evaluate, experiment_for, learn_tool,
-    propose, reason_allowed, record, seed_noise, test,
+    propose, record, seed_noise, test, wording_problem,
 };
 use crate::expr::MEASURES;
 use crate::series::{Board, format_measure, recipe_keys, recipe_label, recipe_text};
 
 /// Chat requests per session.
-pub const MAX_ROUNDS: usize = 4;
+pub const MAX_ROUNDS: usize = 6;
 /// Tool calls per session.
-pub const MAX_CALLS: usize = 8;
+pub const MAX_CALLS: usize = 10;
+/// The longest closing note kept.
+pub const NOTE_LIMIT: usize = 600;
+/// Rounds spent looking before the model is asked to build a tool.
+const LOOK_ROUNDS: usize = 2;
+/// The round in which the model is asked to build a tool.
+const BUILD_ROUND: usize = LOOK_ROUNDS;
+
+/// What the model is asked to do in a round. The program narrows the tools it offers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    /// measure, compare_knob, learn_tool.
+    Look,
+    /// learn_tool, measure: name something the listed measures do not capture.
+    Build,
+    /// propose_hypothesis, learn_tool, measure, finish.
+    Propose,
+    /// finish only.
+    Close,
+}
+
+impl Phase {
+    /// The phase of a zero-based round.
+    pub fn of(round: usize) -> Phase {
+        if round + 1 >= MAX_ROUNDS {
+            Phase::Close
+        } else if round == BUILD_ROUND {
+            Phase::Build
+        } else if round > BUILD_ROUND {
+            Phase::Propose
+        } else {
+            Phase::Look
+        }
+    }
+
+    /// The message that opens this phase, when it differs from the round before.
+    pub fn prompt(self) -> &'static str {
+        match self {
+            Phase::Look => "Investigate. Start with measure.",
+            Phase::Build => {
+                "Now build at least one tool with learn_tool: a formula for something the listed measures do not capture in these curves. For example, how far a curve climbs after its low (last / low), or how steep the last epoch is (slope_between(end_epoch - 1, end_epoch)). Pick what these runs make you curious about, name it, and say what it means."
+            }
+            Phase::Propose => {
+                "Now propose hypotheses from what you measured: a knob, a formula, and a direction, with the mechanism you suspect. A knob that did not change is fine; the program will plan the runs that would test it. You may still build a tool or measure once more."
+            }
+            Phase::Close => {
+                "Call finish now, with a note in words on what you looked at and what is still open."
+            }
+        }
+    }
+
+    fn offers(self, tool: &str) -> bool {
+        match self {
+            Phase::Look => matches!(tool, "measure" | "compare_knob" | "learn_tool" | "finish"),
+            Phase::Build => matches!(tool, "learn_tool" | "measure"),
+            Phase::Propose => matches!(
+                tool,
+                "propose_hypothesis" | "learn_tool" | "measure" | "finish"
+            ),
+            Phase::Close => tool == "finish",
+        }
+    }
+}
 
 /// One tool call and what the program answered.
 #[derive(Clone, Debug, PartialEq)]
@@ -84,7 +146,24 @@ impl Workbench {
         MAX_CALLS.saturating_sub(self.steps.len())
     }
 
-    /// The function schemas offered to the model. Knob names are enumerated from these recipes.
+    /// The schemas offered in one phase: a few tools at a time.
+    pub fn tool_specs_for(&self, phase: Phase) -> Value {
+        Value::Array(
+            self.tool_specs()
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|spec| {
+                    spec["function"]["name"]
+                        .as_str()
+                        .is_some_and(|name| phase.offers(name))
+                })
+                .collect(),
+        )
+    }
+
+    /// Every function schema. Knob names are enumerated from these recipes.
     pub fn tool_specs(&self) -> Value {
         let mut knobs: Vec<String> = Vec::new();
         for series in &self.board.series {
@@ -143,9 +222,10 @@ impl Workbench {
                 "parameters": {"type": "object", "properties": {
                     "knob": {"type": "string", "enum": knobs},
                     "formula": formula,
-                    "direction": {"type": "string", "enum": ["lower", "higher"], "description": "Which way the formula moves when the knob goes up."},
+                    "knob_change": {"type": "string", "enum": ["raise", "lower"], "description": "The change to the knob you have in mind."},
+                    "formula_moves": {"type": "string", "enum": ["up", "down"], "description": "Which way you expect the formula to move after that change."},
                     "why": {"type": "string", "description": "The mechanism you suspect, in words, with no numbers."}
-                }, "required": ["knob", "formula", "direction", "why"]}
+                }, "required": ["knob", "formula", "knob_change", "formula_moves", "why"]}
             }
         }));
         tools.push(json!({
@@ -167,7 +247,7 @@ impl Workbench {
             "You are the RunForge workbench. You investigate fine-tuning runs by calling tools. \
 You never compute or quote numbers yourself: the tools compute, and the program prints every number. \
 Your job is to find what these runs can and cannot say about what each knob does. \
-Look at the data with measure. When no measure captures what you want, build one with learn_tool and reuse it. \
+Look at the data with measure. Building tools is part of the job: when a question needs a measure that is not listed, or you ask the same thing of the curves twice, define it with learn_tool. A kept tool is there for every later session. \
 Propose hypotheses as a knob, a formula, and a direction; the program tests them. \
 A knob that had the same value on every run was not tested here. Do not suggest changing it. You may still propose a hypothesis about it; the program will mark it not testable and plan the runs that would test it. \
 Use at most ",
@@ -266,7 +346,7 @@ Use at most ",
             text.push_str(&open.join("\n"));
             text.push('\n');
         }
-        text.push_str("Investigate. Start with measure.");
+        text.push_str(Phase::Look.prompt());
         text
     }
 
@@ -289,23 +369,25 @@ Use at most ",
             "measure" => self.measure(&field("formula")),
             "compare_knob" => self.compare(&field("knob"), &field("formula")),
             "learn_tool" => self.learn(&field("name"), &field("formula"), &field("meaning")),
-            "propose_hypothesis" => self.hypothesize(
-                &field("knob"),
-                &field("formula"),
-                &field("direction"),
-                &field("why"),
-            ),
+            "propose_hypothesis" => {
+                let direction = direction_of(&field("knob_change"), &field("formula_moves"))
+                    .unwrap_or_else(|| field("direction"));
+                self.hypothesize(&field("knob"), &field("formula"), &direction, &field("why"))
+            }
             "finish" => {
                 let note = field("note");
                 self.finished = true;
                 if note.trim().is_empty() {
                     (true, "Finished.".to_string())
-                } else if reason_allowed(&note) {
+                } else if let Some(problem) = wording_problem(&note, NOTE_LIMIT) {
+                    self.note_dropped = true;
+                    (
+                        false,
+                        format!("Finished. Your note was dropped: {problem}."),
+                    )
+                } else {
                     self.note = Some(note.trim().to_string());
                     (true, "Finished. Your note is kept.".to_string())
-                } else {
-                    self.note_dropped = true;
-                    (false, "Finished. Your note had a digit, markdown, or a verdict word, so it was dropped.".to_string())
                 }
             }
             other => (
@@ -494,6 +576,25 @@ Use at most ",
     }
 }
 
+/// The program's direction (the formula when the knob goes up) from the proposer's own framing.
+///
+/// "Lower the learning rate and the low goes down" is the direction "higher":
+/// raising the rate would raise the low. Asking this way keeps a proposer from
+/// stating one claim in the reason and the opposite in the direction.
+pub fn direction_of(knob_change: &str, formula_moves: &str) -> Option<String> {
+    let raise = match knob_change.trim().to_ascii_lowercase().as_str() {
+        "raise" | "up" | "increase" | "higher" => true,
+        "lower" | "down" | "decrease" | "reduce" => false,
+        _ => return None,
+    };
+    let up = match formula_moves.trim().to_ascii_lowercase().as_str() {
+        "up" | "higher" | "increase" | "increases" => true,
+        "down" | "lower" | "decrease" | "decreases" => false,
+        _ => return None,
+    };
+    Some(if raise == up { "higher" } else { "lower" }.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -568,6 +669,30 @@ mod tests {
     }
 
     #[test]
+    fn each_phase_offers_a_few_tools_and_the_last_offers_only_finish() {
+        let bench = Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-06");
+        let names = |phase| -> Vec<String> {
+            bench
+                .tool_specs_for(phase)
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| t["function"]["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(
+            names(Phase::of(0)),
+            vec!["measure", "compare_knob", "learn_tool", "finish"]
+        );
+        assert_eq!(names(Phase::of(BUILD_ROUND)), vec!["measure", "learn_tool"]);
+        assert_eq!(
+            names(Phase::of(BUILD_ROUND + 1)),
+            vec!["measure", "learn_tool", "propose_hypothesis", "finish"]
+        );
+        assert_eq!(names(Phase::of(MAX_ROUNDS - 1)), vec!["finish"]);
+    }
+
+    #[test]
     fn calls_are_computed_by_the_program_and_capped() {
         let mut bench = Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-06");
         assert!(
@@ -593,7 +718,14 @@ mod tests {
                 )
                 .contains("Kept rebound")
         );
-        let answer = bench.call("propose_hypothesis", &json!({"knob": "learning_rate", "formula": "rebound", "direction": "lower", "why": "A slower step settles deeper."}));
+        assert_eq!(direction_of("lower", "down").as_deref(), Some("higher"));
+        assert_eq!(direction_of("raise", "down").as_deref(), Some("lower"));
+        assert_eq!(direction_of("sideways", "down"), None);
+        let answer = bench.call("propose_hypothesis", &json!({"knob": "learning_rate", "formula": "rebound", "knob_change": "lower", "formula_moves": "down", "why": "A slower step settles deeper."}));
+        assert!(
+            answer.contains("When learning rate goes up, rebound goes higher."),
+            "{answer}"
+        );
         assert!(answer.contains("not testable here"), "{answer}");
         assert!(answer.contains("To settle it: 6 runs"), "{answer}");
         assert_eq!(bench.used, vec!["rebound".to_string()]);

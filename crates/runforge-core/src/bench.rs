@@ -222,10 +222,11 @@ pub fn compare_knob(board: &Board, knob: &str, column: &Column) -> Result<KnobCo
     if !board.varying.iter().any(|key| key == knob) {
         return Err(match board.shared.get(knob) {
             Some(value) => format!(
-                "{label} was {} on every run, so these runs hold no evidence about it.",
+                "{} was {} on every run, so these runs hold no evidence about it.",
+                capitalized(label),
                 recipe_text(value)
             ),
-            None => format!("{label} is not in these recipes."),
+            None => format!("{} is not in these recipes.", capitalized(label)),
         });
     }
     let mut arms: Vec<Arm> = Vec::new();
@@ -284,6 +285,14 @@ pub fn compare_knob(board: &Board, knob: &str, column: &Column) -> Result<KnobCo
         noise,
         pairs_higher,
     })
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 fn median(values: &[f64]) -> f64 {
@@ -455,14 +464,19 @@ impl Hypothesis {
     }
 }
 
-/// A reason may explain. It may not carry a digit, markdown, or a verdict word.
-pub fn reason_allowed(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    if text.chars().any(|ch| ch.is_ascii_digit()) || text.contains("**") || text.contains('#') {
-        return false;
+/// Why a piece of the model's wording is refused, or `None` when it may stand.
+///
+/// Wording may explain. It may not carry a digit, markdown, or a verdict word, and
+/// it may not run past `limit` characters. Numbers belong to the program.
+pub fn wording_problem(text: &str, limit: usize) -> Option<String> {
+    if text.chars().any(|ch| ch.is_ascii_digit()) {
+        return Some("it carried a digit, and numbers come only from the tools".to_string());
     }
-    if text.chars().count() > 280 {
-        return false;
+    if text.contains("**") || text.contains('#') {
+        return Some("it carried markdown".to_string());
+    }
+    if text.chars().count() > limit {
+        return Some(format!("it ran past {limit} characters"));
     }
     const VERDICT: &[&str] = &[
         "proves",
@@ -474,9 +488,16 @@ pub fn reason_allowed(text: &str) -> bool {
         "always",
         "never",
     ];
-    !lower
+    let lower = text.to_lowercase();
+    lower
         .split(|ch: char| !ch.is_ascii_alphanumeric())
-        .any(|word| VERDICT.contains(&word))
+        .find(|word| VERDICT.contains(word))
+        .map(|word| format!("it carried the verdict word \"{word}\""))
+}
+
+/// A hypothesis's reason: at most 280 characters, no digit, markdown, or verdict.
+pub fn reason_allowed(text: &str) -> bool {
+    wording_problem(text, 280).is_none()
 }
 
 /// Test one hypothesis on this board. Holm's adjustment is applied across a batch by `test_all`.
@@ -907,14 +928,25 @@ pub fn propose(
         .iter()
         .any(|series| series.recipe.contains_key(knob));
     if !in_recipe {
-        return Err(format!("{knob} is not a field of these recipes."));
+        let mut names: Vec<&str> = Vec::new();
+        for series in &board.series {
+            for (key, value) in &series.recipe {
+                if value.is_number() && !names.contains(&key.as_str()) {
+                    names.push(key);
+                }
+            }
+        }
+        return Err(format!(
+            "{knob} is not a field of these recipes. The seed is not a knob. Knobs you can name: {}.",
+            names.join(", ")
+        ));
     }
     let Some(direction) = Direction::parse(direction) else {
         return Err("The direction is lower or higher.".to_string());
     };
     parse_with_library(formula, library)?;
-    if !reason_allowed(why) {
-        return Err("The reason may not carry a digit, markdown, or a verdict word.".to_string());
+    if let Some(problem) = wording_problem(why, 280) {
+        return Err(format!("The reason was refused: {problem}."));
     }
     let method = board_method(board);
     let formula = formula.trim().to_string();

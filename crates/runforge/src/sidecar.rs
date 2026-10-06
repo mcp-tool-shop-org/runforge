@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use runforge_core::Phase;
 pub use runforge_core::Workbench;
 
 /// What a workbench session came back with.
@@ -53,11 +54,15 @@ fn run_bench(port: u16, mut bench: Workbench) -> BenchReply {
         serde_json::json!({"role": "user", "content": bench.opening()}),
     ];
     let mut stopped = format!("It used all {} rounds.", runforge_core::MAX_ROUNDS);
-    for _ in 0..runforge_core::MAX_ROUNDS {
+    for round in 0..runforge_core::MAX_ROUNDS {
+        let phase = Phase::of(round);
+        if round > 0 && Phase::of(round - 1) != phase {
+            messages.push(serde_json::json!({"role": "user", "content": phase.prompt()}));
+        }
         let payload = serde_json::json!({
             "model": model,
             "messages": messages,
-            "tools": bench.tool_specs(),
+            "tools": bench.tool_specs_for(phase),
             "stream": false,
             "think": false,
             "options": { "temperature": 0.2, "num_predict": 600 }
@@ -552,5 +557,49 @@ mod tests {
             !seen.iter().any(|request| request.contains("x:cloud\""))
                 || seen[1].contains("qwen3:14b")
         );
+    }
+
+    /// Live run against the local Ollama on a real folder. Opt-in:
+    /// RUNFORGE_LIVE_FOLDER=<series folder> cargo test -p runforge live_workbench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn live_workbench() {
+        let folder = std::env::var("RUNFORGE_LIVE_FOLDER").expect("RUNFORGE_LIVE_FOLDER");
+        let board = runforge_core::load_series_folder(std::path::Path::new(&folder)).unwrap();
+        let bench = runforge_core::Workbench::new(board, Vec::new(), Vec::new(), "2026-10-06");
+        let started = std::time::Instant::now();
+        match super::start_bench(bench).recv().unwrap() {
+            BenchReply::Done {
+                model,
+                bench,
+                stopped,
+            } => {
+                println!(
+                    "model {model}, {stopped} ({:.0} s)",
+                    started.elapsed().as_secs_f64()
+                );
+                for step in &bench.steps {
+                    println!("\n> {} {}\n{}", step.tool, step.args, step.result);
+                }
+                println!(
+                    "\nlearned: {:?}",
+                    bench
+                        .learned
+                        .iter()
+                        .map(|t| (&t.name, &t.formula))
+                        .collect::<Vec<_>>()
+                );
+                println!(
+                    "proposed: {:?}",
+                    bench
+                        .proposed
+                        .iter()
+                        .map(|h| (h.statement(), h.state().map(|s| s.word())))
+                        .collect::<Vec<_>>()
+                );
+                println!("note: {:?} dropped: {}", bench.note, bench.note_dropped);
+            }
+            BenchReply::Absent(text) => println!("absent: {text}"),
+        }
     }
 }

@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use runforge_core::{
     HistoryError, Sample, band_segments, comparison_report, comparison_report_with,
     earlier_readings, epoch_floor, fingerprint, format_measure, ledger_for, load_series_folder,
-    loss_segments, low_band, read_board, recall, recipe_keys, record_weighing, remember,
-    sidecar_prompt, spikes_above, weighed_now,
+    loss_segments, low_band, normalize_recipe, read_board, recall, recipe_keys, record_weighing,
+    remember, sidecar_prompt, spikes_above, weighed_now,
 };
 
 fn scratch(name: &str) -> std::path::PathBuf {
@@ -386,4 +386,43 @@ fn the_ledger_keeps_the_numbers_beside_the_notes_and_groups_by_recipe_and_method
     for dir in [root, prefs, again, other] {
         fs::remove_dir_all(dir).unwrap();
     }
+}
+
+#[test]
+fn a_nested_lora_block_and_short_names_read_as_the_canonical_knobs() {
+    let raw: serde_json::Value = serde_json::from_str(
+        r#"{"lora": {"r": 16, "alpha": 32, "dropout": 0.1, "target_modules": ["q_proj"]},
+            "lr": 0.00015, "schedule": "cosine", "per_device_train_batch_size": 1,
+            "gradient_accumulation_steps": 8, "precision": "bf16"}"#,
+    )
+    .unwrap();
+    let recipe = normalize_recipe(raw.as_object().unwrap().clone());
+    assert_eq!(recipe["lora_r"], 16);
+    assert_eq!(recipe["lora_alpha"], 32);
+    assert_eq!(recipe["learning_rate"], 0.00015);
+    assert_eq!(recipe["lr_scheduler"], "cosine");
+    assert_eq!(recipe["grad_accum"], 8);
+    assert_eq!(recipe["precision"], "bf16");
+    assert!(!recipe.contains_key("lora") && !recipe.contains_key("lr"));
+    let kept: serde_json::Value = serde_json::from_str(
+        r#"{"learning_rate": 0.0002, "lr": 0.1, "lora_r": 8, "lora": {"r": 4}}"#,
+    )
+    .unwrap();
+    let recipe = normalize_recipe(kept.as_object().unwrap().clone());
+    assert_eq!(recipe["learning_rate"], 0.0002);
+    assert_eq!(recipe["lr"], 0.1);
+    assert_eq!(recipe["lora_r"], 8);
+    assert!(recipe.contains_key("lora"));
+}
+
+#[test]
+fn two_runs_with_one_seed_keep_apart_by_file() {
+    let root = scratch("same-seed");
+    fs::write(root.join("run-config-A3.json"), curve(13, 0.08, 0.02)).unwrap();
+    fs::write(root.join("run-config-A7.json"), curve(13, 0.07, 0.03)).unwrap();
+    fs::write(root.join("run-config-seed42.json"), curve(42, 0.06, 0.03)).unwrap();
+    let board = load_series_folder(&root).unwrap();
+    let names: Vec<&str> = board.series.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, vec!["seed 13 (A3)", "seed 13 (A7)", "seed 42"]);
+    fs::remove_dir_all(root).unwrap();
 }

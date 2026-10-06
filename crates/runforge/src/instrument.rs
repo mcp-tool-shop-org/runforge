@@ -3,10 +3,10 @@
 use eframe::egui::{self, Color32, RichText, Stroke};
 use egui_plot::{Line, MarkerShape, Plot, PlotPoints, Points};
 use runforge_core::{
-    Board, Hypothesis, LearnedTool, Ledger, Reading, Sample, SeriesRead, Step, Weighing,
-    band_segments, comparison_report_full, epoch_floor, format_measure, is_heading, loss_segments,
-    low_band, orientation_allowed, orientation_omission, reason_allowed, recipe_keys, recipe_label,
-    recipe_marks, recipe_text, spikes_above, utc_date, weigh,
+    Board, Hypothesis, LearnedTool, Ledger, NOTE_LIMIT, Reading, Sample, SeriesRead, Step,
+    Weighing, band_segments, comparison_report_full, epoch_floor, format_measure, is_heading,
+    loss_segments, low_band, orientation_allowed, orientation_omission, recipe_keys, recipe_label,
+    recipe_marks, recipe_text, spikes_above, utc_date, weigh, wording_problem,
 };
 
 pub enum InstrumentAction {
@@ -452,11 +452,16 @@ fn draw_sidecar(
                 ui.add_space(8.0);
                 model_note(ui, "", omission);
             }
-            if !sidecar.answer.is_empty() && reason_allowed(sidecar.answer) {
+            if !sidecar.answer.is_empty() && wording_problem(sidecar.answer, NOTE_LIMIT).is_none() {
                 ui.add_space(8.0);
-                model_note(ui, "The workbench's note", sidecar.answer);
+                model_note(
+                    ui,
+                    "The model's note (its words, not a measurement)",
+                    sidecar.answer,
+                );
             } else if let Some(remembered) = remembered_note(sidecar.memory, reading)
-                && (orientation_allowed(&remembered) || reason_allowed(&remembered))
+                && (orientation_allowed(&remembered)
+                    || wording_problem(&remembered, NOTE_LIMIT).is_none())
             {
                 ui.add_space(8.0);
                 model_note(ui, "Remembered", &remembered);

@@ -97,7 +97,7 @@ fn a_shared_knob_is_refused_with_its_value() {
     let b = rank_board(&[0.1, 0.12], &[]);
     let column = evaluate(&b, "low", &[]).unwrap();
     let refused = compare_knob(&b, "learning_rate", &column).unwrap_err();
-    assert!(refused.contains("learning rate was 0.0001 on every run"));
+    assert!(refused.contains("Learning rate was 0.0001 on every run"));
     let noise = seed_noise(&b, &column).unwrap();
     assert_eq!(noise.runs, 2);
     assert!((noise.range() - 0.02).abs() < 1e-12);
