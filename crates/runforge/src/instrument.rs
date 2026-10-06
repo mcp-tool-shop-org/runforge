@@ -547,11 +547,18 @@ fn draw_bench(ui: &mut egui::Ui, sidecar: &mut SidecarView<'_>) -> bool {
                     .weak(),
             );
             ui.horizontal(|ui| {
+                let id = ui.make_persistent_id("formula");
+                take_text_actions(ui, id, sidecar.formula);
                 let field = ui.add(
                     egui::TextEdit::singleline(sidecar.formula)
+                        .id(id)
                         .desired_width(ui.available_width() - 48.0)
                         .hint_text("formula"),
                 );
+                ui.ctx().accesskit_node_builder(field.id, |node| {
+                    node.add_action(egui::accesskit::Action::SetValue);
+                    node.add_action(egui::accesskit::Action::ReplaceSelectedText);
+                });
                 let entered =
                     field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
                 if ui.button("Run").clicked() || entered {
@@ -589,6 +596,49 @@ fn draw_bench(ui: &mut egui::Ui, sidecar: &mut SidecarView<'_>) -> bool {
             }
         });
     run
+}
+
+/// Applies AccessKit's SetValue and ReplaceSelectedText to a text box.
+///
+/// egui 0.36 handles neither for TextEdit, so a UI Automation SetValue (a
+/// screen reader, or anything driving the window) never reached the string.
+fn take_text_actions(ui: &egui::Ui, id: egui::Id, text: &mut String) {
+    use egui::accesskit::{Action, ActionData};
+    let mut requests = Vec::new();
+    ui.input_mut(|input| {
+        input.consume_accesskit_action_requests(id, |request| {
+            match (request.action, &request.data) {
+                (
+                    Action::SetValue | Action::ReplaceSelectedText,
+                    Some(ActionData::Value(value)),
+                ) => {
+                    requests.push((request.action, value.to_string()));
+                    true
+                }
+                _ => false,
+            }
+        });
+    });
+    for (action, value) in requests {
+        let mut state = egui::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
+        let chars = text.chars().count();
+        let (start, end) = match (action, state.cursor.char_range()) {
+            (Action::ReplaceSelectedText, Some(range)) => {
+                let [low, high] = range.sorted_cursors();
+                (low.index.0.min(chars), high.index.0.min(chars))
+            }
+            (Action::ReplaceSelectedText, None) => (chars, chars),
+            _ => (0, chars),
+        };
+        let byte = |at: usize| text.char_indices().nth(at).map_or(text.len(), |(i, _)| i);
+        let (from, to) = (byte(start), byte(end));
+        text.replace_range(from..to, &value);
+        let caret = egui::text::CCursor::new(start + value.chars().count());
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::one(caret)));
+        state.store(ui.ctx(), id);
+    }
 }
 
 /// One learned tool for the pane: name, formula, meaning, and how far it has come.

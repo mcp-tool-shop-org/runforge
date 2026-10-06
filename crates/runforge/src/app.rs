@@ -1201,6 +1201,49 @@ mod tests {
         }
     }
 
+    impl Harness {
+        /// The text box with this placeholder, as a screen reader finds it.
+        fn text_box(output: &egui::FullOutput, placeholder: &str) -> egui::accesskit::NodeId {
+            let update = output.platform_output.accesskit_update.as_ref().unwrap();
+            let (id, node) = update
+                .nodes
+                .iter()
+                .find(|(_, node)| {
+                    node.role() == egui::accesskit::Role::TextInput
+                        && node.placeholder() == Some(placeholder)
+                })
+                .unwrap_or_else(|| panic!("missing text box"));
+            assert!(node.supports_action(egui::accesskit::Action::SetValue));
+            assert!(node.supports_action(egui::accesskit::Action::ReplaceSelectedText));
+            *id
+        }
+
+        /// Sends a text action to a box, as UI Automation's SetValue does.
+        fn put_text(
+            &mut self,
+            app: &mut RunForgeApp,
+            placeholder: &str,
+            action: egui::accesskit::Action,
+            value: &str,
+        ) {
+            let output = self.show(app, Vec::new());
+            let id = Self::text_box(&output, placeholder);
+            output.drop_without_applying_deltas();
+            self.show(
+                app,
+                vec![Event::AccessKitActionRequest(
+                    egui::accesskit::ActionRequest {
+                        action,
+                        target_tree: egui::accesskit::TreeId::ROOT,
+                        target_node: id,
+                        data: Some(egui::accesskit::ActionData::Value(value.into())),
+                    },
+                )],
+            )
+            .drop_without_applying_deltas();
+        }
+    }
+
     fn sample_history() -> String {
         r#"[
             {"run_id":"older","status":"failed","model_name":"Alpha","started_at":"2026-01-01T00:00:00","final_loss":0.2,"loss_history":[1.0, null, 0.4],"failure_reason":"boom","hyperparameters":{"lr":0.1,"only":1},"schema_version":"2.0","eval":{"held_out_loss":1.5,"perplexity":4.0,"eval_n":8,"n_prompts":5,"task_metrics":{"f1":0.5}}},
@@ -2320,6 +2363,52 @@ mod tests {
         app.formula = "open('x')".to_string();
         ui.click(&mut app, "Run");
         assert!(app.formula_lines[0].contains("not a measure"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_screen_reader_can_fill_the_formula_box() {
+        let dir = scratch("bench-set-value");
+        let folder = dir.join("runs");
+        std::fs::create_dir(&folder).unwrap();
+        for (seed, low) in [(1, 0.3), (2, 0.1)] {
+            std::fs::write(
+                folder.join(format!("run-config-seed{seed}.json")),
+                format!(
+                    r#"{{"seed": {seed}, "hyperparameters": {{"method": "bf16 LoRA", "lora_r": 16}},
+                    "saturation_log": {{"loss_curve": [
+                        {{"epoch": 0.0, "loss": 4.0, "lr": 0.0001}},
+                        {{"epoch": 1.0, "loss": {low}, "lr": 0.0001}},
+                        {{"epoch": 2.0, "loss": 0.5, "lr": 0.0}}]}}}}"#
+                ),
+            )
+            .unwrap();
+        }
+        let mut app = RunForgeApp::open(dir.join("prefs"));
+        let chosen = folder.clone();
+        app.ask_folder = Box::new(move |_| Some(chosen.clone()));
+        let mut ui = Harness::new();
+        ui.click(&mut app, "Open folder");
+        ui.click(&mut app, "Run");
+        assert_eq!(app.formula_lines, ["The formula is empty."]);
+
+        let set = egui::accesskit::Action::SetValue;
+        ui.put_text(&mut app, "formula", set, "last");
+        assert_eq!(app.formula, "last");
+        // Typed text lands at the caret, which the whole-value set left at the end.
+        let replace = egui::accesskit::Action::ReplaceSelectedText;
+        ui.put_text(&mut app, "formula", replace, " / low");
+        assert_eq!(app.formula, "last / low");
+        ui.click(&mut app, "Run");
+        assert!(
+            app.formula_lines
+                .iter()
+                .any(|line| line.starts_with("seed 1: "))
+        );
+
+        // A set replaces everything, selection or not.
+        ui.put_text(&mut app, "formula", set, "low");
+        assert_eq!(app.formula, "low");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
