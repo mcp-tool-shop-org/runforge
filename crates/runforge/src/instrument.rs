@@ -445,12 +445,11 @@ fn draw_sidecar(
         .id_salt("sidecar-scroll")
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            if let Some(finding) = reading.finding() {
-                ui.add_space(8.0);
-                ui.label(RichText::new(finding).color(note_color(dark)).strong());
+            // The workbench answers Ask, so it sits under the button that starts it.
+            ui.add_space(6.0);
+            if draw_bench(ui, sidecar) {
+                action = InstrumentAction::TryFormula;
             }
-            ui.add_space(8.0);
-            draw_report(ui, report);
             if sidecar.blocked {
                 ui.add_space(8.0);
                 model_note(ui, "", omission);
@@ -469,10 +468,12 @@ fn draw_sidecar(
                 ui.add_space(8.0);
                 model_note(ui, "Remembered", &remembered);
             }
-            ui.add_space(8.0);
-            if draw_bench(ui, sidecar) {
-                action = InstrumentAction::TryFormula;
+            if let Some(finding) = reading.finding() {
+                ui.add_space(8.0);
+                ui.label(RichText::new(finding).color(note_color(dark)).strong());
             }
+            ui.add_space(8.0);
+            draw_report(ui, report);
             if !weighing.cards.is_empty() {
                 ui.add_space(8.0);
                 egui::CollapsingHeader::new("Reference")
@@ -538,23 +539,29 @@ fn draw_bench(ui: &mut egui::Ui, sidecar: &mut SidecarView<'_>) -> bool {
             }
             if !sidecar.tools.is_empty() {
                 ui.add_space(6.0);
-                ui.label(RichText::new("Learned tools").strong());
-                for tool in sidecar.tools {
-                    let status = if tool.kept() { "kept" } else { "provisional" };
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(format!(
-                                "{} = {}. {} ({status}, used {} times)",
-                                tool.name, tool.formula, tool.meaning, tool.uses
-                            ))
-                            .small(),
-                        )
-                        .wrap(),
-                    );
-                }
+                egui::CollapsingHeader::new(format!("Learned tools ({})", sidecar.tools.len()))
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        for tool in sidecar.tools {
+                            ui.add(egui::Label::new(RichText::new(tool_line(tool)).small()).wrap());
+                        }
+                    });
             }
         });
     run
+}
+
+/// One learned tool for the pane: name, formula, meaning, and how far it has come.
+pub(crate) fn tool_line(tool: &LearnedTool) -> String {
+    let status = if tool.kept() { "kept" } else { "provisional" };
+    let uses = match tool.uses {
+        1 => "used once".to_string(),
+        n => format!("used {n} times"),
+    };
+    format!(
+        "{} = {}. {} ({status}, {uses})",
+        tool.name, tool.formula, tool.meaning
+    )
 }
 
 fn draw_report(ui: &mut egui::Ui, report: &str) {

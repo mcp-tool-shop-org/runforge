@@ -212,6 +212,7 @@ impl RunForgeApp {
     fn load_series(&mut self, folder: PathBuf) {
         match load_series_folder(&folder) {
             Ok(board) => {
+                self.note.clear();
                 let reading = read_board(&board);
                 self.memory_line = recall(&self.prefs_dir, &board).unwrap_or_default();
                 if self.memory_line.is_empty() {
@@ -447,7 +448,7 @@ impl RunForgeApp {
             return;
         };
         match std::fs::write(&path, text) {
-            Ok(()) => self.note = format!("Wrote {}", path.display()),
+            Ok(()) => self.note = format!("Wrote {}", home_relative(&path)),
             Err(error) => self.note = format!("could not write the export: {error}"),
         }
     }
@@ -524,7 +525,7 @@ impl RunForgeApp {
             }
         });
         if let Some(path) = &self.opened_file {
-            ui.label(path.display().to_string());
+            ui.label(home_relative(path));
         }
         if self.history.is_some() || self.session.is_some() {
             self.launch_form(ui);
@@ -1054,6 +1055,32 @@ fn line(ui: &mut egui::Ui, name: &str, value: &str) {
         return;
     }
     ui.label(format!("{name}: {value}"));
+}
+
+/// A path for the window, with the user's home folder shown as `~`, so the account name stays off the screen.
+pub(crate) fn home_relative(path: &std::path::Path) -> String {
+    let shown = path.display().to_string();
+    let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) else {
+        return shown;
+    };
+    let home = home
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_string();
+    if home.is_empty() {
+        return shown;
+    }
+    let lower = shown.to_lowercase();
+    let home_lower = home.to_lowercase();
+    if lower == home_lower {
+        return "~".to_string();
+    }
+    for sep in ['\\', '/'] {
+        if lower.starts_with(&format!("{home_lower}{sep}")) && shown.is_char_boundary(home.len()) {
+            return format!("~{}", &shown[home.len()..]);
+        }
+    }
+    shown
 }
 
 #[cfg(test)]
@@ -2095,6 +2122,42 @@ mod tests {
         output.drop_without_applying_deltas();
         assert!(row_ok);
         assert!(all_inside);
+    }
+
+    #[test]
+    fn paths_show_the_home_folder_as_a_tilde() {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .unwrap();
+        let inside = std::path::Path::new(&home)
+            .join("Downloads")
+            .join("report.txt");
+        let shown = super::home_relative(&inside);
+        assert!(shown.starts_with('~'), "{shown}");
+        assert!(shown.ends_with("report.txt"));
+        assert!(!shown.contains(&home));
+        assert_eq!(super::home_relative(std::path::Path::new(&home)), "~");
+        let outside = std::path::Path::new("E:/runs/arc");
+        assert_eq!(super::home_relative(outside), outside.display().to_string());
+    }
+
+    #[test]
+    fn a_learned_tool_says_once_and_times() {
+        let mut tool = runforge_core::LearnedTool {
+            name: "rebound".into(),
+            formula: "last / low".into(),
+            meaning: "end over low".into(),
+            created: "2026-10-06".into(),
+            uses: 1,
+            boards: vec!["a".into()],
+        };
+        assert_eq!(
+            crate::instrument::tool_line(&tool),
+            "rebound = last / low. end over low (provisional, used once)"
+        );
+        tool.uses = 3;
+        tool.boards.push("b".into());
+        assert!(crate::instrument::tool_line(&tool).ends_with("(kept, used 3 times)"));
     }
 
     #[test]

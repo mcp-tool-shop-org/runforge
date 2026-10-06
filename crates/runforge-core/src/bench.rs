@@ -761,7 +761,7 @@ pub fn experiment_for(
             .first()
             .cloned()
             .unwrap_or_else(|| "its current value".to_string());
-        levels = vec![current, "[a second value you choose]".to_string()];
+        levels = vec![current, "a second value of your choice".to_string()];
     }
     let planned = match (noise, delta) {
         (Some(noise), Some(delta)) => seeds_needed(noise.sigma, delta).unwrap_or(3),
