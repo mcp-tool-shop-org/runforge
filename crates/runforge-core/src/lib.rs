@@ -50,7 +50,7 @@ pub use series::{
     read_board, recall, recipe_keys, recipe_label, recipe_marks, recipe_text, remember,
     sidecar_prompt, spikes_above,
 };
-pub use session::{MAX_CALLS, MAX_ROUNDS, NOTE_LIMIT, Phase, Step, Workbench};
+pub use session::{MAX_CALLS, MAX_CALLS_PER_ROUND, MAX_ROUNDS, NOTE_LIMIT, Phase, Step, Workbench};
 pub use weigh::{Card, Neighborhood, Separation, Spread, Weighing, spread, weigh};
 
 pub const VERSION: &str = "2.0.0";

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The README, the landing page, and the handbook describe the instrument, the report and the workbench; the handbook gains a workbench page and a reference of hypothesis states, verdicts and limits. Coverage is 93.8% of lines, with each pull request's new lines also held to 90%. No package has been submitted to Partner Center.
 
+The workbench sits under Ask in the sidecar, so a session's calls, the formula box and the model's note appear where you pressed the button; learned tools fold away under a count. Paths in the window show your home folder as `~`, and opening a series folder clears an old status line. A run plan reads "a second value of your choice", and a tool used once says so.
+
+Live sessions while taking Store screenshots shaped the loop: finish is offered only after a look and a build, a model that answers in prose is reminded once to use the tools, and at most three calls run per round so a model cannot spend its whole budget listing measures. Recipe chips move to a new row instead of being clipped, and the low-row charts fit their cards.
+
 The Store package keeps the 1.0.x Application Id, `App`, so an update from the classifier keeps the user's Start and taskbar pins. The pack script refuses a manifest with any other Id.
 
 A formula's limits count what a reader sees: 64 parts (numbers, names, calls, operators) and 16 levels of parentheses, calls and signs. Before, they counted parser steps, so a formula with five functions was refused.

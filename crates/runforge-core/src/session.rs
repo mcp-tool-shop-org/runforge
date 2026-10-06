@@ -24,6 +24,9 @@ use crate::series::{Board, format_measure, recipe_keys, recipe_label, recipe_tex
 pub const MAX_ROUNDS: usize = 6;
 /// Tool calls per session.
 pub const MAX_CALLS: usize = 10;
+/// Tool calls run per round. A model that lists every measure at once would
+/// otherwise spend the whole session before it builds or proposes anything.
+pub const MAX_CALLS_PER_ROUND: usize = 3;
 /// The longest closing note kept.
 pub const NOTE_LIMIT: usize = 600;
 /// Rounds spent looking before the model is asked to build a tool.
@@ -34,7 +37,7 @@ const BUILD_ROUND: usize = LOOK_ROUNDS;
 /// What the model is asked to do in a round. The program narrows the tools it offers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
-    /// measure, compare_knob, learn_tool.
+    /// measure, compare_knob, learn_tool. Finish is not offered yet.
     Look,
     /// learn_tool, measure: name something the listed measures do not capture.
     Build,
@@ -76,7 +79,9 @@ impl Phase {
 
     fn offers(self, tool: &str) -> bool {
         match self {
-            Phase::Look => matches!(tool, "measure" | "compare_knob" | "learn_tool" | "finish"),
+            // No finish while looking: a session that stops before building a tool or
+            // proposing a hypothesis leaves the bench where it was.
+            Phase::Look => matches!(tool, "measure" | "compare_knob" | "learn_tool"),
             Phase::Build => matches!(tool, "learn_tool" | "measure"),
             Phase::Propose => matches!(
                 tool,
@@ -698,7 +703,7 @@ mod tests {
         };
         assert_eq!(
             names(Phase::of(0)),
-            vec!["measure", "compare_knob", "learn_tool", "finish"]
+            vec!["measure", "compare_knob", "learn_tool"]
         );
         assert_eq!(names(Phase::of(BUILD_ROUND)), vec!["measure", "learn_tool"]);
         assert_eq!(

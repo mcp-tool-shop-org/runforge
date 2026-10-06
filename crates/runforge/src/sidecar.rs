@@ -54,6 +54,8 @@ fn run_bench(port: u16, mut bench: Workbench) -> BenchReply {
         serde_json::json!({"role": "user", "content": bench.opening()}),
     ];
     let mut stopped = format!("It used all {} rounds.", runforge_core::MAX_ROUNDS);
+    // A model that answers in prose is reminded once to use the tools.
+    let mut reminded = false;
     for round in 0..runforge_core::MAX_ROUNDS {
         let phase = Phase::of(round);
         if round > 0 && Phase::of(round - 1) != phase {
@@ -94,11 +96,27 @@ fn run_bench(port: u16, mut bench: Workbench) -> BenchReply {
         let calls = tool_calls(&message);
         messages.push(message);
         if calls.is_empty() {
+            let next = Phase::of(round + 1);
+            if !reminded && round + 1 < runforge_core::MAX_ROUNDS {
+                reminded = true;
+                messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": format!("Answer with a tool call, not prose. {}", next.prompt())
+                }));
+                continue;
+            }
             stopped = "The model answered without calling a tool.".to_string();
             break;
         }
-        for (name, args) in calls {
-            let answer = bench.call(&name, &args);
+        for (index, (name, args)) in calls.into_iter().enumerate() {
+            let answer = if index < runforge_core::MAX_CALLS_PER_ROUND {
+                bench.call(&name, &args)
+            } else {
+                format!(
+                    "Not run: at most {} tool calls run per round. Call it again next round if you still need it.",
+                    runforge_core::MAX_CALLS_PER_ROUND
+                )
+            };
             messages
                 .push(serde_json::json!({"role": "tool", "tool_name": name, "content": answer}));
             if bench.finished {
@@ -568,11 +586,13 @@ mod tests {
             r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
             r#"{"capabilities":["tools"]}"#.to_string(),
             r#"{"message":{"role":"assistant","content":"I think rank matters."}}"#.to_string(),
+            r#"{"message":{"role":"assistant","content":"Rank matters, I said."}}"#.to_string(),
         ]);
         let (why, calls) = stopped(start_bench_on(port, bench()).recv_timeout(wait).unwrap());
         assert_eq!(why, "The model answered without calling a tool.");
         assert_eq!(calls, 0);
-        server.join().unwrap();
+        let seen = server.join().unwrap();
+        assert!(seen[3].contains("Answer with a tool call, not prose."));
 
         // The server reports an error mid-session.
         let (port, server) = serve(vec![
@@ -586,18 +606,21 @@ mod tests {
     }
 
     #[test]
-    fn a_session_that_runs_out_of_calls_says_so() {
+    fn a_round_runs_at_most_three_calls_and_the_session_stops_at_its_budget() {
         let mut bodies = vec![
             r#"{"models":[{"name":"qwen3:14b"}]}"#.to_string(),
             r#"{"capabilities":["tools"]}"#.to_string(),
         ];
-        let many: Vec<String> = (0..runforge_core::MAX_CALLS)
+        let five: Vec<String> = (0..5)
             .map(|_| r#"{"function":{"name":"measure","arguments":{"formula":"low"}}}"#.to_string())
             .collect();
-        bodies.push(format!(
-            r#"{{"message":{{"role":"assistant","content":"","tool_calls":[{}]}}}}"#,
-            many.join(",")
-        ));
+        // Rounds of five calls run three each: ten calls are spent in four rounds.
+        for _ in 0..4 {
+            bodies.push(format!(
+                r#"{{"message":{{"role":"assistant","content":"","tool_calls":[{}]}}}}"#,
+                five.join(",")
+            ));
+        }
         let (port, server) = serve(bodies);
         let reply = start_bench_on(port, bench())
             .recv_timeout(Duration::from_secs(20))
@@ -608,7 +631,8 @@ mod tests {
             format!("It used all {} tool calls.", runforge_core::MAX_CALLS)
         );
         assert_eq!(calls, runforge_core::MAX_CALLS);
-        server.join().unwrap();
+        let seen = server.join().unwrap();
+        assert!(seen[3].contains("Not run: at most 3 tool calls run per round."));
     }
 
     #[test]
