@@ -1,5 +1,6 @@
 /target
 **/*.rs.bk
+.swarm/
 /release/
 site/.astro/
 site/dist/
