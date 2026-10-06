@@ -334,10 +334,11 @@ Use at most ",
             .iter()
             .filter(|h| h.method == crate::bench::board_method(&self.board))
             .map(|h| {
+                let judged = crate::bench::verdicts(std::slice::from_ref(h));
                 format!(
-                    "- {} ({})",
+                    "- {} (across folders: {})",
                     h.statement(),
-                    h.state().map(State::word).unwrap_or("not yet tested")
+                    judged[0].1.word()
                 )
             })
             .collect();

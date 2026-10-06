@@ -355,3 +355,53 @@ fn tools_hypotheses_notes_and_weighings_share_one_memory_file() {
     ));
     assert!(!reason_allowed("It always wins."));
 }
+
+#[test]
+fn evidence_gathers_across_folders_until_the_bench_can_decide() {
+    use runforge_core::{Verdict, comparison_report_full, verdicts};
+    let date = "2026-10-06";
+    let first = rank_board(&[0.3, 0.32, 0.31], &[0.1, 0.12, 0.11]);
+    let proposal = Proposal {
+        knob: "lora_r",
+        formula: "low",
+        direction: "lower",
+        why: "A larger adapter can fit more.",
+    };
+    let mut h = propose(&first, &[], &[], &proposal, date).unwrap();
+    let (evaluation, _) = test_hypothesis(&first, &h, &[], date);
+    record(&mut h, evaluation);
+    // Proposed here, so this folder does not count, however clean it is.
+    assert_eq!(verdicts(std::slice::from_ref(&h))[0].1, Verdict::Open);
+    let second = rank_board(&[0.29, 0.33, 0.35], &[0.13, 0.09, 0.1]);
+    let (evaluation, _) = test_hypothesis(&second, &h, &[], "2026-10-07");
+    record(&mut h, evaluation);
+    let one = verdicts(std::slice::from_ref(&h));
+    assert_eq!(
+        one[0].1,
+        Verdict::Open,
+        "one clean folder gives about 9.5, short of 20"
+    );
+    let third = rank_board(&[0.36, 0.3, 0.34], &[0.12, 0.14, 0.08]);
+    let (evaluation, _) = test_hypothesis(&third, &h, &[], "2026-10-08");
+    record(&mut h, evaluation);
+    let two = verdicts(std::slice::from_ref(&h));
+    assert_eq!(two[0].1, Verdict::Supported);
+    assert_eq!(two[0].0.counted, vec!["2026-10-07", "2026-10-08"]);
+    let report = comparison_report_full(
+        &third,
+        Some("2026-10-08"),
+        &Default::default(),
+        std::slice::from_ref(&h),
+        &[],
+    );
+    assert!(report.contains("Across folders: supported."), "{report}");
+    assert!(report.contains("from two folders"));
+    let first_report = comparison_report_full(
+        &first,
+        None,
+        &Default::default(),
+        std::slice::from_ref(&h),
+        &[],
+    );
+    assert!(first_report.contains("Not counted: it was proposed on these runs."));
+}

@@ -257,13 +257,8 @@ impl RunForgeApp {
         let (Some(board), Some(reading)) = (board, reading) else {
             return;
         };
-        let method = board_method(&board);
-        let on_bench: Vec<Hypothesis> = self
-            .hypotheses
-            .iter()
-            .filter(|hypothesis| hypothesis.method == method)
-            .cloned()
-            .collect();
+        // The whole bench: e-BH needs every hypothesis; the report prints this method's.
+        let on_bench: Vec<Hypothesis> = self.hypotheses.clone();
         let action = {
             let mut view = SidecarView {
                 memory: &self.memory_line,

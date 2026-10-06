@@ -20,6 +20,12 @@ const TOOLS_KEY: &str = "tools";
 const HYPOTHESES_KEY: &str = "hypotheses";
 const MAX_TOOLS: usize = 50;
 const MAX_HYPOTHESES: usize = 60;
+const MAX_EVALUATIONS: usize = 40;
+/// The fixed tilt of the permutation e-value. Chosen before any data: with three
+/// runs per setting, a clean separation gives about 9.53 and a reversal about 0.003.
+pub const LAMBDA: f64 = 8.0;
+/// The false discovery rate the bench's verdicts are held to.
+pub const FDR: f64 = 0.05;
 /// One-sided level for the exact rank test. With three runs per setting, 1/20 is the smallest p there is.
 pub const ALPHA: f64 = 0.05;
 /// z for a two-sided 0.05 test plus z for 80% power, squared and doubled (Colas et al. 2018).
@@ -395,8 +401,8 @@ impl State {
             State::Untestable => "not testable here",
             State::Confounded => "confounded",
             State::Inconclusive => "inconclusive",
-            State::Supported => "supported",
-            State::Refuted => "refuted",
+            State::Supported => "passes its test on these runs alone",
+            State::Refuted => "goes the other way on these runs alone",
         }
     }
 
@@ -430,6 +436,12 @@ pub struct Evaluation {
     pub state: State,
     /// The program's sentence: what was compared and why the state is what it is.
     pub detail: String,
+    /// This folder's permutation e-value for the declared direction, and for the opposite one.
+    /// `None` when the folder gives no test: the knob did not change, or another one changed with it.
+    pub e_for: Option<f64>,
+    pub e_against: Option<f64>,
+    /// Fingerprints of the runs tested, so a run is never counted twice across folders.
+    pub runs: Vec<String>,
 }
 
 /// A claim about what one knob does to one measure, with its test fixed when proposed.
@@ -444,6 +456,8 @@ pub struct Hypothesis {
     /// The proposer's reason, fenced: no digit, no markdown, no verdict.
     pub why: String,
     pub proposed: String,
+    /// The folder the hypothesis was proposed on. Its data shaped the claim, so it is not evidence for it.
+    pub proposed_on: String,
     pub evaluations: Vec<Evaluation>,
 }
 
@@ -508,11 +522,15 @@ pub fn test(
     date: &str,
 ) -> (Evaluation, Option<KnobComparison>) {
     let key = board_key(board);
+    let runs: Vec<String> = board.series.iter().map(run_fingerprint).collect();
     let done = |state: State, detail: String| Evaluation {
         date: date.to_string(),
         board: key.clone(),
         state,
         detail,
+        e_for: None,
+        e_against: None,
+        runs: runs.clone(),
     };
     if board_method(board) != hypothesis.method {
         return (
@@ -615,7 +633,18 @@ pub fn test(
         )
     };
     (
-        done(state_detail.0, format!("{head} {}", state_detail.1)),
+        {
+            let mut evaluation = done(state_detail.0, format!("{head} {}", state_detail.1));
+            let low: Vec<f64> = comparison.low.values.iter().map(|v| v.1).collect();
+            let high: Vec<f64> = comparison.high.values.iter().map(|v| v.1).collect();
+            let opposite = match hypothesis.direction {
+                Direction::Lower => Direction::Higher,
+                Direction::Higher => Direction::Lower,
+            };
+            evaluation.e_for = permutation_e(&low, &high, hypothesis.direction);
+            evaluation.e_against = permutation_e(&low, &high, opposite);
+            evaluation
+        },
         Some(comparison),
     )
 }
@@ -964,17 +993,25 @@ pub fn propose(
         direction,
         why: why.trim().to_string(),
         proposed: date.to_string(),
+        proposed_on: board_key(board),
         evaluations: Vec::new(),
     })
 }
 
 /// Record a test, newest first, replacing an older test of the same board.
+///
+/// A folder tested again keeps its place, so the order folders are counted in
+/// depends only on when each was first opened, never on its result.
 pub fn record(hypothesis: &mut Hypothesis, evaluation: Evaluation) {
-    hypothesis
+    match hypothesis
         .evaluations
-        .retain(|old| old.board != evaluation.board);
-    hypothesis.evaluations.insert(0, evaluation);
-    hypothesis.evaluations.truncate(12);
+        .iter_mut()
+        .find(|old| old.board == evaluation.board)
+    {
+        Some(old) => *old = evaluation,
+        None => hypothesis.evaluations.insert(0, evaluation),
+    }
+    hypothesis.evaluations.truncate(MAX_EVALUATIONS);
 }
 
 fn text(object: &Map<String, Value>, key: &str) -> Option<String> {
@@ -1023,11 +1060,15 @@ fn hypothesis_to(h: &Hypothesis) -> Value {
         "direction": h.direction.word(),
         "why": h.why,
         "proposed": h.proposed,
+        "proposed_on": h.proposed_on,
         "evaluations": h.evaluations.iter().map(|e| serde_json::json!({
             "date": e.date,
             "board": e.board,
             "state": e.state.key(),
             "detail": e.detail,
+            "e_for": e.e_for,
+            "e_against": e.e_against,
+            "runs": e.runs,
         })).collect::<Vec<_>>(),
     })
 }
@@ -1042,6 +1083,7 @@ fn hypothesis_from(value: &Value) -> Option<Hypothesis> {
         direction: Direction::parse(&text(object, "direction")?)?,
         why: text(object, "why").unwrap_or_default(),
         proposed: text(object, "proposed").unwrap_or_default(),
+        proposed_on: text(object, "proposed_on").unwrap_or_default(),
         evaluations: object
             .get("evaluations")
             .and_then(Value::as_array)
@@ -1055,10 +1097,214 @@ fn hypothesis_from(value: &Value) -> Option<Hypothesis> {
                             board: text(item, "board")?,
                             state: State::from_key(&text(item, "state")?)?,
                             detail: text(item, "detail")?,
+                            e_for: item.get("e_for").and_then(Value::as_f64),
+                            e_against: item.get("e_against").and_then(Value::as_f64),
+                            runs: item
+                                .get("runs")
+                                .and_then(Value::as_array)
+                                .map(|runs| {
+                                    runs.iter()
+                                        .filter_map(Value::as_str)
+                                        .map(str::to_string)
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
                         })
                     })
                     .collect()
             })
             .unwrap_or_default(),
     })
+}
+
+/// Samples hashed into a run's identity: enough to tell runs apart, few enough
+/// that a run still training keeps its identity as it grows.
+const IDENTITY_SAMPLES: usize = 32;
+
+/// A run's identity: an FNV-1a hash of its seed and its first stored epochs and losses.
+///
+/// The same run opened from two folders, or again after it trained further, has
+/// one identity, so its evidence is counted once. Two runs that share a seed and
+/// a recipe but not their data have different identities.
+pub fn run_fingerprint(series: &crate::series::Series) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    feed(&series.seed.unwrap_or(i64::MIN).to_le_bytes());
+    for sample in series.samples.iter().take(IDENTITY_SAMPLES) {
+        feed(&sample.x.unwrap_or(f64::NAN).to_bits().to_le_bytes());
+        feed(&sample.loss.unwrap_or(f64::NAN).to_bits().to_le_bytes());
+    }
+    format!("{hash:016x}")
+}
+
+/// A permutation e-value for "the measure moves this way when the knob goes up".
+///
+/// S is the share of (low-setting run, high-setting run) pairs that move in the
+/// declared direction, ties counting half. The e-value is exp(LAMBDA * S) divided
+/// by its average over every way of relabeling the pooled runs into two groups of
+/// the same sizes. If the knob does nothing, the runs are exchangeable, every
+/// relabeling is equally likely, and the e-value averages exactly 1 (Koning,
+/// arXiv:2310.01153, on e-values for exchangeability). `None` past 20 runs, where
+/// the relabelings are not enumerated.
+pub fn permutation_e(low: &[f64], high: &[f64], direction: Direction) -> Option<f64> {
+    let n = low.len() + high.len();
+    if low.is_empty() || high.is_empty() || n > 20 {
+        return None;
+    }
+    let pool: Vec<f64> = low.iter().chain(high).copied().collect();
+    let k = high.len();
+    let pairs = (low.len() * high.len()) as f64;
+    let share = |high: &[f64], low: &[f64]| {
+        let above = pairs_above(high, low);
+        match direction {
+            Direction::Higher => above / pairs,
+            Direction::Lower => (pairs - above) / pairs,
+        }
+    };
+    let observed = share(high, low);
+    // Log-sum-exp over the relabelings, so a large LAMBDA cannot overflow.
+    let mut exponents = Vec::new();
+    let mut pick = Vec::with_capacity(k);
+    combinations(n, k, 0, &mut pick, &mut |chosen| {
+        let (mut h, mut l) = (Vec::with_capacity(k), Vec::with_capacity(n - k));
+        for (index, value) in pool.iter().enumerate() {
+            if chosen.contains(&index) {
+                h.push(*value);
+            } else {
+                l.push(*value);
+            }
+        }
+        exponents.push(LAMBDA * share(&h, &l));
+    });
+    let top = exponents.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let mean = exponents.iter().map(|x| (x - top).exp()).sum::<f64>() / exponents.len() as f64;
+    Some((LAMBDA * observed - top).exp() / mean)
+}
+
+/// One hypothesis's evidence gathered across folders.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Evidence {
+    /// The product of the counted folders' e-values for the declared direction, and against it.
+    pub e_for: f64,
+    pub e_against: f64,
+    /// Folders whose e-values were multiplied in, oldest first, with their dates.
+    pub counted: Vec<String>,
+    /// Folders left out and why: the one it was proposed on, or one sharing a run with a counted folder.
+    pub left_out: Vec<(String, &'static str)>,
+}
+
+impl Evidence {
+    /// The e-value for "the knob moves this measure", either way: the average of the two products.
+    pub fn e_any(&self) -> f64 {
+        (self.e_for + self.e_against) / 2.0
+    }
+}
+
+/// Multiply the folders' e-values, oldest folder first.
+///
+/// A folder counts when it gave a test, is not the folder the hypothesis was
+/// proposed on, and shares no run with a folder already counted. Which folders
+/// count depends only on that order and on run identity, never on the values,
+/// so the product of e-values from new runs stays valid however the folders
+/// were chosen (Grunwald, de Heide, and Koolen 2024, "Safe testing", JRSS-B 86(5);
+/// Ramdas, Grunwald, Vovk, and Shafer 2023, arXiv:2210.01948).
+pub fn evidence(hypothesis: &Hypothesis) -> Evidence {
+    let mut e_for = 1.0;
+    let mut e_against = 1.0;
+    let mut counted = Vec::new();
+    let mut left_out = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for evaluation in hypothesis.evaluations.iter().rev() {
+        let (Some(for_here), Some(against_here)) = (evaluation.e_for, evaluation.e_against) else {
+            continue;
+        };
+        if !hypothesis.proposed_on.is_empty() && evaluation.board == hypothesis.proposed_on {
+            left_out.push((evaluation.date.clone(), "proposed on these runs"));
+            continue;
+        }
+        if evaluation
+            .runs
+            .iter()
+            .any(|run| seen.contains(&run.as_str()))
+        {
+            left_out.push((
+                evaluation.date.clone(),
+                "shares runs with a folder already counted",
+            ));
+            continue;
+        }
+        seen.extend(evaluation.runs.iter().map(String::as_str));
+        e_for *= for_here;
+        e_against *= against_here;
+        counted.push(evaluation.date.clone());
+    }
+    Evidence {
+        e_for,
+        e_against,
+        counted,
+        left_out,
+    }
+}
+
+/// Where a hypothesis stands across every folder it was tested on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    Supported,
+    Refuted,
+    Open,
+}
+
+impl Verdict {
+    pub fn word(self) -> &'static str {
+        match self {
+            Verdict::Supported => "supported",
+            Verdict::Refuted => "refuted",
+            Verdict::Open => "open",
+        }
+    }
+}
+
+/// The bench's verdicts: e-BH at FDR across every hypothesis given (Wang and Ramdas 2022, JRSS-B 84(3)).
+///
+/// With K hypotheses, sort their e-values (e_any) from largest; the largest k
+/// for which the k-th is at least K / (FDR * k) marks those k as discovered. A
+/// discovered hypothesis is supported when its evidence for outweighs its
+/// evidence against, and refuted otherwise. e-BH holds the false discovery rate
+/// under any dependence between the hypotheses. The direction call is the larger
+/// of the two products; it is not separately error-controlled.
+pub fn verdicts(hypotheses: &[Hypothesis]) -> Vec<(Evidence, Verdict)> {
+    let gathered: Vec<Evidence> = hypotheses.iter().map(evidence).collect();
+    let k_total = gathered.len();
+    let mut order: Vec<usize> = (0..k_total).collect();
+    order.sort_by(|a, b| gathered[*b].e_any().total_cmp(&gathered[*a].e_any()));
+    let mut discovered = 0;
+    for (rank, index) in order.iter().enumerate() {
+        let k = rank + 1;
+        if gathered[*index].e_any() >= k_total as f64 / (FDR * k as f64) {
+            discovered = k;
+        }
+    }
+    let mut out: Vec<(Evidence, Verdict)> = gathered
+        .iter()
+        .map(|evidence| (evidence.clone(), Verdict::Open))
+        .collect();
+    for index in order.into_iter().take(discovered) {
+        let evidence = &out[index].0;
+        out[index].1 = if evidence.e_for >= evidence.e_against {
+            Verdict::Supported
+        } else {
+            Verdict::Refuted
+        };
+    }
+    out
+}
+
+/// The e-value a single hypothesis needs, alone at the top of a bench of `k_total`.
+pub fn threshold(k_total: usize) -> f64 {
+    k_total.max(1) as f64 / FDR
 }

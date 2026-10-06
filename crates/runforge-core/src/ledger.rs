@@ -36,14 +36,20 @@ pub struct Weighed {
     pub fingerprint: String,
     pub runs: Vec<RunMark>,
     pub abstain: bool,
+    /// Each run's identity (seed and first samples). Empty in records kept before identities.
+    pub ids: Vec<String>,
 }
 
 impl Weighed {
-    /// The recipe plus the run names. The same folder opened twice has the same key.
+    /// The recipe plus the runs' identities. An older record without identities falls back to run names.
     fn key(&self) -> String {
-        let mut names: Vec<&str> = self.runs.iter().map(|run| run.name.as_str()).collect();
-        names.sort_unstable();
-        format!("{}\n{}", self.fingerprint, names.join("\n"))
+        let mut parts: Vec<&str> = if self.ids.is_empty() {
+            self.runs.iter().map(|run| run.name.as_str()).collect()
+        } else {
+            self.ids.iter().map(String::as_str).collect()
+        };
+        parts.sort_unstable();
+        format!("{}\n{}", self.fingerprint, parts.join("\n"))
     }
 
     fn same_numbers(&self, other: &Weighed) -> bool {
@@ -110,15 +116,26 @@ impl Ledger {
     }
 }
 
-/// The recipe plus the run names: the same folder opened twice has the same key.
+/// The recipe plus each run's identity (its seed and first samples).
+///
+/// The same runs opened twice have one key. Two folders that reuse a recipe and
+/// seed names but hold different runs have different keys.
 pub fn board_key(board: &Board) -> String {
-    let mut names: Vec<&str> = board
+    let mut runs: Vec<String> = board
         .series
         .iter()
-        .map(|series| series.name.as_str())
+        .map(crate::bench::run_fingerprint)
         .collect();
-    names.sort_unstable();
-    format!("{}\n{}", fingerprint(board), names.join("\n"))
+    runs.sort_unstable();
+    format!(
+        "{}
+{}",
+        fingerprint(board),
+        runs.join(
+            "
+"
+        )
+    )
 }
 
 /// The board as weighed today.
@@ -148,6 +165,11 @@ pub fn weighed_now(board: &Board, date: &str) -> Weighed {
         fingerprint: fingerprint(board),
         runs,
         abstain: weighing.abstain,
+        ids: board
+            .series
+            .iter()
+            .map(crate::bench::run_fingerprint)
+            .collect(),
     }
 }
 
@@ -239,6 +261,10 @@ fn to_value(item: &Weighed) -> Value {
     );
     object.insert("abstain".into(), Value::Bool(item.abstain));
     object.insert("runs".into(), Value::Array(runs));
+    object.insert(
+        "ids".into(),
+        Value::Array(item.ids.iter().cloned().map(Value::String).collect()),
+    );
     Value::Object(object)
 }
 
@@ -267,5 +293,15 @@ fn from_value(value: &Value) -> Option<Weighed> {
         fingerprint: object.get("fingerprint")?.as_str()?.to_string(),
         runs,
         abstain: object.get("abstain")?.as_bool()?,
+        ids: object
+            .get("ids")
+            .and_then(Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }

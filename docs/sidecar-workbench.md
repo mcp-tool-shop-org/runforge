@@ -14,7 +14,7 @@ Scored 0 to 3 against the six workflow standards.
 | ANDON_AUTHORITY | 3 | Every call is validated before it runs: tool name, knob enum, formula grammar and size, finiteness on every run, duplicate checks, and the wording fence. A refusal goes back to the model as a sentence and nothing is kept. The loop stops at the round and call caps. Tested in `session.rs`, `bench.rs` and `sidecar.rs`, including a fake-Ollama end-to-end test. |
 | NAMED_COMPENSATORS | 2 | The session's only writes are to `sidecar-memory.json` beside the preferences: learned tools (`tools`) and hypotheses (`hypotheses`). The table below gives the undo for each. Nothing is published, trained or fetched. |
 | DECOMPOSE_BY_SECRETS | 3 | What changes together stays together. The formula language (`expr`) knows nothing about tools or models. The statistics and verdicts (`bench`) know nothing about chat. The session (`session`) knows nothing about HTTP. The HTTP loop (`sidecar`) knows nothing about statistics. Each has its own tests. |
-| UNCERTAINTY_GATED_HUMANS | 2 | A verdict reaches "supported" or "refuted" only when an exact test, declared before the data was examined, clears 1 in 20 after Holm's adjustment. Everything else is "inconclusive", with the reason stated, plus a run plan. The pane labels the model's note as its words, not a measurement. |
+| UNCERTAINTY_GATED_HUMANS | 3 | A verdict across folders (supported or refuted) needs the combined e-value to pass e-BH at a 5% false discovery rate across the whole bench. The folder a hypothesis was proposed on never counts. Everything else is open, with the evidence so far and the threshold printed, plus a run plan. Validity is tested exactly (the e-value averages 1 over every relabeling) and by simulation (Ville's bound under no effect). The pane labels the model's note as its words, not a measurement. |
 | EXTERNAL_VERIFIER | n/a | No specialized claims. The statistics are textbook (Mann-Whitney, Holm, Vargha-Delaney, Colas power), and their values are pinned in tests. |
 
 ### Compensators
@@ -59,13 +59,13 @@ Four questions decided the design. Sources were located by search on 2026-10-06,
 - Explanations raise acceptance whether the AI is right or wrong. Bansal et al. 2021, arXiv:2006.14779.
 - Seed variance is large and must be estimated, not assumed. Bouthillier et al. 2021, arXiv:2103.03098. Henderson et al. 2018, arXiv:1709.06560.
 
-*Implication:* a hypothesis fixes its knob, formula and direction when it is proposed, and the program sets its state:
+*Implication:* a hypothesis fixes its knob, formula and direction when it is proposed. On each folder alone, the program sets its state:
 - **Not testable**: the knob did not vary.
 - **Confounded**: another knob moved with it.
 - **Inconclusive**: one run per setting, a gap inside the seed spread, fewer than three runs per setting, or the test not passed.
-- **Supported** or **refuted**: the exact one-sided Mann-Whitney test passes at 0.05 (Mann and Whitney 1947), after Holm's adjustment across the hypotheses tested on those runs (Holm 1979).
+- **Passes** or **goes the other way**: the exact one-sided Mann-Whitney test passes at 0.05 on that folder (Mann and Whitney 1947), after Holm's adjustment across the hypotheses tested on those runs (Holm 1979).
 
-With three runs per setting, 1/20 is the smallest p the exact test can give, so a smaller study cannot reach a verdict. That is intended. Opening a folder retests the stored hypotheses for its method, so evidence builds up across folders. A run plan has one knob, two settings and at least three seeds each. Its seed count comes from the pilot sigma when a seed spread exists (Colas et al. 2018, arXiv:1806.08295).
+With three runs per setting, 1/20 is the smallest p the exact test can give, so one small folder rarely settles anything. The verdict that counts is the one across folders. It is in "Evidence across folders" below. Opening a folder retests the stored hypotheses for its method. A run plan has one knob, two settings and at least three seeds each. Its seed count comes from the pilot sigma when a seed spread exists (Colas et al. 2018, arXiv:1806.08295).
 
 The formulas that do not hold up with two to five runs are left out: fANOVA (Hutter et al. 2014), almost stochastic dominance (Dror et al. 2019), learning-curve extrapolation (Domhan et al. 2015), and the gradient noise scale (McCandlish et al. 2018, which needs per-example gradients we don't store).
 
@@ -85,9 +85,29 @@ The program refused each of these, and the model saw the reason:
 
 A note can still contain a wrong claim in words. That is why the pane labels it.
 
+## Evidence across folders
+
+A single folder rarely settles a knob. With three runs per setting, the exact test's smallest p is 1/20. So evidence is gathered as e-values, which can be multiplied across folders without losing validity.
+
+- **Per folder:** a permutation e-value. Let S be the share of (low-setting run, high-setting run) pairs that move in the declared direction, ties counting half. The e-value is exp(λS) divided by its average over every relabeling of the pooled runs into groups of the same sizes, with λ = 8 fixed before any data. If the knob does nothing, the runs are exchangeable and the e-value averages exactly 1 (Koning 2023, arXiv:2310.01153, e-values for exchangeability).
+  - A clean three-against-three separation gives 9.53.
+  - A reversal gives about 0.003.
+  - One run against one run gives at most 2.
+  - A messy folder gives less than 1, so it costs evidence.
+- **Across folders:** the e-values are multiplied, oldest folder first. A product of e-values from new, independent runs stays valid when the decision to run another folder depended on earlier ones (Grünwald, de Heide and Koolen 2024, "Safe testing", JRSS-B 86(5); Ramdas, Grünwald, Vovk and Shafer 2023, arXiv:2210.01948). Ville's inequality then bounds the chance the product ever reaches 1/α under no effect.
+  - The folder a hypothesis was proposed on is left out, because its data shaped the claim.
+  - A folder that shares a run with one already counted is left out. A run's identity is its seed plus a hash of its first 32 samples, so a run that kept training is the same run.
+  - A folder tested again keeps its place, so which folders count never depends on their results.
+- **The verdict:** e-BH at a 5% false discovery rate across every hypothesis on the bench (Wang and Ramdas 2022, JRSS-B 84(3)), which holds under any dependence.
+  - Each hypothesis's e-value is the average of its two products, for and against. Each product is an e-value, and so is their average.
+  - A discovered hypothesis is supported when the evidence for outweighs the evidence against, and refuted otherwise. That direction call is not separately error-controlled.
+  - One hypothesis alone needs 20. Two clean three-against-three folders give about 45.
+  - Each folder still shows its own exact-test result, labeled "on these runs alone".
+
+Tests pin the exact average of 1 over every relabeling, including with ties. Two simulations check the rest. Under no effect, the product crosses 20 in at most 5% of 4,000 eight-folder sequences. Under a real shift, four folders usually pass.
+
 ## Deferred
 
-- **E-values with e-BH for the stream of hypotheses** (Wang and Ramdas, arXiv:2009.02824). This would make evidence accumulate validly across folders. Today each board is tested on its own, with Holm across that board's hypotheses.
 - **A block-bootstrap interval for a run's window median** (Efron 1979). Adjacent samples are correlated, so it needs a block length.
 - **Tool retrieval by description, and merging near-duplicates into parameterized tools** (CRAFT, ToolLibGen). These matter once a library holds dozens of tools.
 - **Recording the model's name and digest with each trace**, which would raise PIN_PER_STEP to 3.

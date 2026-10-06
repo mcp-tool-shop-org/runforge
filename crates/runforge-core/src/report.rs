@@ -72,39 +72,68 @@ pub fn comparison_report_full(
 fn bench_section(board: &Board, hypotheses: &[Hypothesis], tools: &[LearnedTool]) -> String {
     let key = crate::ledger::board_key(board);
     let method = crate::bench::board_method(board);
-    let mine: Vec<&Hypothesis> = hypotheses.iter().filter(|h| h.method == method).collect();
+    // e-BH runs over the whole bench; only this method's hypotheses are printed.
+    let judged = crate::bench::verdicts(hypotheses);
+    let needed = crate::bench::threshold(hypotheses.len());
     let mut out = String::new();
+    let mine: Vec<(
+        &Hypothesis,
+        &(crate::bench::Evidence, crate::bench::Verdict),
+    )> = hypotheses
+        .iter()
+        .zip(&judged)
+        .filter(|(h, _)| h.method == method)
+        .collect();
     if !mine.is_empty() {
         line(&mut out, "Hypotheses on the bench");
         line(
             &mut out,
-            "Each was proposed with its test fixed: a knob, a formula, and a direction. The program sets the state.",
+            &format!(
+                "Each was proposed with its test fixed: a knob, a formula, and a direction. Evidence is an e-value per folder, multiplied across folders with new runs; the folder a hypothesis was proposed on does not count. A verdict needs e-BH at a 5% false discovery rate across the {} hypotheses on the bench: one alone needs {}.",
+                hypotheses.len(),
+                format_measure(needed)
+            ),
         );
-        for hypothesis in mine {
-            let here = hypothesis.evaluations.iter().find(|e| e.board == key);
-            let text = match here {
-                Some(evaluation) => format!(
-                    "* {} Here: {}. {}",
+        for (hypothesis, (gathered, verdict)) in mine {
+            line(
+                &mut out,
+                &format!(
+                    "* {} Across folders: {}. Evidence for {}, against {}, from {}.",
                     hypothesis.statement(),
-                    evaluation.state.word(),
-                    evaluation.detail
+                    verdict.word(),
+                    format_measure(gathered.e_for),
+                    format_measure(gathered.e_against),
+                    match gathered.counted.len() {
+                        0 => "no counted folder yet".to_string(),
+                        1 => "one folder".to_string(),
+                        n => format!("{} folders", count_word(n, false)),
+                    }
                 ),
-                None => format!("* {} Not tested on these runs.", hypothesis.statement()),
-            };
-            line(&mut out, &text);
-            let elsewhere = hypothesis
-                .evaluations
-                .iter()
-                .filter(|e| e.board != key)
-                .count();
-            if elsewhere > 0 {
-                let decided: Vec<String> = hypothesis
+            );
+            if let Some(evaluation) = hypothesis.evaluations.iter().find(|e| e.board == key) {
+                let counted = if key == hypothesis.proposed_on {
+                    " Not counted: it was proposed on these runs."
+                } else {
+                    ""
+                };
+                line(
+                    &mut out,
+                    &format!(
+                        "  Here: {}. {}{counted}",
+                        evaluation.state.word(),
+                        evaluation.detail
+                    ),
+                );
+            }
+            for (date, why) in &gathered.left_out {
+                if hypothesis
                     .evaluations
                     .iter()
-                    .filter(|e| e.board != key)
-                    .map(|e| format!("{} on {}", e.state.word(), e.date))
-                    .collect();
-                line(&mut out, &format!("  Elsewhere: {}.", decided.join("; ")));
+                    .any(|e| e.board == key && &e.date == date)
+                {
+                    continue;
+                }
+                line(&mut out, &format!("  Not counted ({date}): {why}."));
             }
         }
         out.push('\n');

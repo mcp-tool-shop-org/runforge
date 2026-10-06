@@ -426,3 +426,30 @@ fn two_runs_with_one_seed_keep_apart_by_file() {
     assert_eq!(names, vec!["seed 13 (A3)", "seed 13 (A7)", "seed 42"]);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn two_experiments_with_one_recipe_and_one_seed_are_not_the_same_runs() {
+    let first = scratch("exp-one");
+    let second = scratch("exp-two");
+    fs::write(first.join("run-config-seed13.json"), curve(13, 0.08, 0.02)).unwrap();
+    fs::write(
+        second.join("run-config-seed13.json"),
+        curve(13, 0.09, 0.025),
+    )
+    .unwrap();
+    let one = load_series_folder(&first).unwrap();
+    let two = load_series_folder(&second).unwrap();
+    assert_eq!(fingerprint(&one), fingerprint(&two));
+    assert_ne!(
+        runforge_core::board_key(&one),
+        runforge_core::board_key(&two)
+    );
+    let prefs = scratch("exp-prefs");
+    record_weighing(&prefs, &weighed_now(&one, "2026-10-01")).unwrap();
+    let ledger = ledger_for(&prefs, &two);
+    assert!(ledger.same_runs.is_none());
+    assert_eq!(ledger.same_recipe.len(), 1);
+    for dir in [first, second, prefs] {
+        fs::remove_dir_all(dir).unwrap();
+    }
+}

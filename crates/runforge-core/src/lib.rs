@@ -19,11 +19,12 @@ mod time;
 mod weigh;
 
 pub use bench::{
-    ALPHA, Arm, Column, Direction, Evaluation, Experiment, Hypothesis, KnobComparison, LearnedTool,
-    Noise, Proposal, State, board_method, compare_knob, evaluate, exact_p, experiment_for,
-    learn_tool, note_use, propose, read_hypotheses, read_tools, reason_allowed, record, seed_noise,
-    seeds_needed, test as test_hypothesis, test_all, wording_problem, write_hypotheses,
-    write_tools,
+    ALPHA, Arm, Column, Direction, Evaluation, Evidence, Experiment, FDR, Hypothesis,
+    KnobComparison, LAMBDA, LearnedTool, Noise, Proposal, State, Verdict, board_method,
+    compare_knob, evaluate, evidence, exact_p, experiment_for, learn_tool, note_use, permutation_e,
+    propose, read_hypotheses, read_tools, reason_allowed, record, run_fingerprint, seed_noise,
+    seeds_needed, test as test_hypothesis, test_all, threshold, verdicts, wording_problem,
+    write_hypotheses, write_tools,
 };
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
