@@ -27,7 +27,7 @@ A session runs in four phases, and each phase offers only a few tools:
 
 | Phase | Rounds | Tools offered | What the model is asked to do |
 | --- | --- | --- | --- |
-| Look | 1–2 | measure, compare_knob, learn_tool, finish | Measure the runs |
+| Look | 1–2 | measure, compare_knob, learn_tool | Measure the runs (finish is not offered yet) |
 | Build | 3 | learn_tool, measure | Build at least one formula the listed measures don't capture |
 | Propose | 4–5 | propose_hypothesis, learn_tool, measure, finish | State hypotheses from what it measured |
 | Close | 6 | finish | End with a note in words |

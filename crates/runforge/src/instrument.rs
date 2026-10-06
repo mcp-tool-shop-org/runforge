@@ -139,18 +139,39 @@ fn draw_stage(
 }
 
 fn draw_recipe(ui: &mut egui::Ui, board: &Board, dark: bool) {
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        for key in recipe_keys(&board.shared) {
-            if key == "target_modules" {
-                continue;
-            }
-            let Some(value) = board.shared.get(key) else {
-                continue;
-            };
-            chip(ui, recipe_label(key), &recipe_text(value));
+    // Lay the chips out in rows by their measured widths: a wrapping row cannot
+    // measure a framed chip before drawing it, so the last one was clipped.
+    let total = ui.available_width();
+    let gap = 8.0;
+    let chips: Vec<(String, String)> = recipe_keys(&board.shared)
+        .into_iter()
+        .filter(|key| *key != "target_modules")
+        .filter_map(|key| {
+            board
+                .shared
+                .get(key)
+                .map(|value| (recipe_label(key).to_string(), recipe_text(value)))
+        })
+        .collect();
+    let mut rows: Vec<Vec<&(String, String)>> = vec![Vec::new()];
+    let mut used = 0.0;
+    for item in &chips {
+        let width = chip_width(ui, &item.0, &item.1);
+        if used > 0.0 && used + width > total {
+            rows.push(Vec::new());
+            used = 0.0;
         }
-    });
+        used += width + gap;
+        rows.last_mut().expect("a row").push(item);
+    }
+    for row in rows.iter().filter(|row| !row.is_empty()) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (label, value) in row {
+                chip(ui, label, value);
+            }
+        });
+    }
     if let Some(modules) = board.shared.get("target_modules").and_then(recipe_marks) {
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
@@ -187,15 +208,33 @@ fn draw_recipe(ui: &mut egui::Ui, board: &Board, dark: bool) {
     }
 }
 
+/// The width a chip will take: its wider line of text plus the frame's margins.
+fn chip_width(ui: &egui::Ui, label: &str, value: &str) -> f32 {
+    let color = ui.visuals().text_color();
+    let small = egui::TextStyle::Small.resolve(ui.style());
+    let body = egui::TextStyle::Body.resolve(ui.style());
+    let painter = ui.painter();
+    let label = painter
+        .layout_no_wrap(label.to_string(), small, color)
+        .size()
+        .x;
+    let value = painter
+        .layout_no_wrap(value.to_string(), body, color)
+        .size()
+        .x;
+    label.max(value) + 20.0
+}
+
 fn chip(ui: &mut egui::Ui, label: &str, value: &str) {
     egui::Frame::new()
         .fill(ui.visuals().widgets.inactive.bg_fill)
         .corner_radius(8)
         .inner_margin(egui::Margin::symmetric(10, 6))
         .show(ui, |ui| {
+            // A chip never wraps inside; the row moves it to the next line instead.
             ui.vertical(|ui| {
-                ui.label(RichText::new(label).small().weak());
-                ui.label(RichText::new(value).strong());
+                ui.add(egui::Label::new(RichText::new(label).small().weak()).extend());
+                ui.add(egui::Label::new(RichText::new(value).strong()).extend());
             });
         });
 }
@@ -341,6 +380,7 @@ fn draw_band(ui: &mut egui::Ui, board: &Board, reading: &Reading, dark: bool, fo
                     let low = read.and_then(|item| item.low.clone());
                     let last = read.and_then(|item| item.last.clone());
                     Plot::new(id)
+                        .width(ui.available_width())
                         .height(124.0)
                         .allow_zoom(egui::Vec2b::FALSE)
                         .allow_drag(egui::Vec2b::FALSE)
