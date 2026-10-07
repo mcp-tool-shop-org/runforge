@@ -33,7 +33,7 @@ pub trait Host: Send + Sync {
     }
     /// How the closing note is asked for, in the tool schema.
     fn note_hint(&self) -> &str {
-        "What you looked at and what is still open, in words, with no numbers."
+        "What you looked at and what is still open, in words, with no numbers. When you report a hypothesis's state, use the program's words for it."
     }
     /// Knob keys in the order the opening lists them.
     fn knob_keys<'a>(&self, knobs: &'a Map<String, Value>) -> Vec<&'a str> {

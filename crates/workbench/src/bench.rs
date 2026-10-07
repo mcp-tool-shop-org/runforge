@@ -433,6 +433,18 @@ impl State {
         }
     }
 
+    /// The state as a whole sentence about one set of runs. `word` is a label ("Here: …");
+    /// this is the form to put in running text, which `word` does not fit for every state.
+    pub fn sentence(&self) -> &'static str {
+        match self {
+            State::Untestable => "It is not testable on these runs.",
+            State::Confounded => "It is confounded on these runs.",
+            State::Inconclusive => "It is inconclusive on these runs.",
+            State::Supported => "It passes its test on these runs alone.",
+            State::Refuted => "It goes the other way on these runs alone.",
+        }
+    }
+
     fn key(&self) -> &'static str {
         match self {
             State::Untestable => "untestable",
@@ -813,15 +825,25 @@ pub fn experiment_for(
     noise: Option<&Noise>,
     delta: Option<f64>,
 ) -> Experiment {
-    let mut levels: Vec<String> = Vec::new();
+    // The settings seen, ordered as `compare_knob` orders its arms (by number when both are
+    // numbers, else by text), so the plan's two levels are the two ends that were compared.
+    let mut seen: Vec<(String, Option<f64>)> = Vec::new();
     for series in &board.runs {
         if let Some(value) = series.knobs.get(&hypothesis.knob) {
             let text = recipe_text(value);
-            if !levels.contains(&text) {
-                levels.push(text);
+            if !seen.iter().any(|(known, _)| *known == text) {
+                seen.push((text, value.as_f64()));
             }
         }
     }
+    seen.sort_by(|a, b| match (a.1, b.1) {
+        (Some(x), Some(y)) => x.total_cmp(&y),
+        _ => a.0.cmp(&b.0),
+    });
+    let mut levels: Vec<String> = match (seen.first(), seen.last()) {
+        (Some(low), Some(high)) if seen.len() >= 2 => vec![low.0.clone(), high.0.clone()],
+        _ => seen.into_iter().map(|(text, _)| text).collect(),
+    };
     if levels.len() < 2 {
         let current = levels
             .first()

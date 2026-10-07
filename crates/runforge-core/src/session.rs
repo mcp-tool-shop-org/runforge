@@ -146,7 +146,10 @@ mod tests {
             answer.contains("When learning rate goes up, rebound goes higher."),
             "{answer}"
         );
-        assert!(answer.contains("not testable here"), "{answer}");
+        assert!(
+            answer.contains("It is not testable on these runs."),
+            "{answer}"
+        );
         assert!(answer.contains("To settle it: 6 runs"), "{answer}");
         assert_eq!(bench.used, vec!["rebound".to_string()]);
         assert!(
@@ -178,8 +181,9 @@ mod tests {
 
 #[cfg(test)]
 mod snapshot {
-    /// RunForge's tool schema, byte for byte, as it was before hosts could word their own
-    /// hints (`tests/fixtures/tool_specs.json`, written from the code at runforge 39c0ce7).
+    /// RunForge's tool schema, byte for byte (`tests/fixtures/tool_specs.json`, written from
+    /// the code at runforge 39c0ce7). The note's description was changed on purpose afterwards,
+    /// to ask for the program's state words; any other change fails here.
     #[test]
     fn runforge_tool_schema_is_byte_identical() {
         let bench = super::Workbench::new(
