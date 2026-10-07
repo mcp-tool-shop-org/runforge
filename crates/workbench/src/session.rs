@@ -596,10 +596,10 @@ Use at most ",
         self.note_learned_use(formula);
         let (evaluation, comparison) = test(&self.board, &hypothesis, &tools, &self.date);
         let mut text = format!(
-            "Recorded {}: {} On these runs it is {}. {}",
+            "Recorded {}: {} {} {}",
             hypothesis.id,
             hypothesis.statement_on(&self.board),
-            evaluation.state.word(),
+            evaluation.state.sentence(),
             evaluation.detail
         );
         let settled = matches!(evaluation.state, State::Supported | State::Refuted);

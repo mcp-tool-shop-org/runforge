@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+Workbench wording fixes, found in ScalarScope's live sessions:
+- A recorded hypothesis read "On these runs it is passes its test on these runs alone". Each state now has its own sentence, such as "It passes its test on these runs alone." RunForge's sidecar shows these sentences too, so this is a bug fix to RunForge's wording.
+- The tool schema's description of the closing note now asks the model to use the program's words when it reports a state. A model had called a hypothesis "supported" when it had only passed on one set of runs. RunForge's schema snapshot changes in exactly that line.
+- A run plan now names the two settings the comparison used, the lowest and the highest. Before, it named the first two in file order.
+
 A workbench host can word how the tool schema asks for a hypothesis's reason and for the closing note. RunForge keeps its wording: a test holds its tool schema byte for byte to the snapshot taken before the change. Each step of a session now records the chat round it came in, so a record shows which calls were written before the model read any of their answers.
 
 The workbench's wording fence lets a host's measure and learned-tool names through when they carry digits, as ScalarScope's `p50` and `p99` do. Only an exact whole name passes: `99th`, `p99x` and `p 99` are still refused. When a host has such names, a digit refusal says which ones may be written. RunForge's measures have no digits, so its fence reads exactly as before.

@@ -130,7 +130,7 @@
       "parameters": {
         "properties": {
           "note": {
-            "description": "What you looked at and what is still open, in words, with no numbers.",
+            "description": "What you looked at and what is still open, in words, with no numbers. When you report a hypothesis's state, use the program's words for it.",
             "type": "string"
           }
         },

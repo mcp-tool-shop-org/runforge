@@ -188,6 +188,89 @@ fn a_host_words_its_own_reason_hint_and_others_keep_the_default() {
     let note = &specs[4]["function"]["parameters"]["properties"]["note"]["description"];
     assert_eq!(
         note,
-        "What you looked at and what is still open, in words, with no numbers."
+        "What you looked at and what is still open, in words, with no numbers. When you report a hypothesis's state, use the program's words for it."
+    );
+}
+
+#[test]
+fn every_state_reads_as_a_sentence() {
+    use workbench::State;
+    for state in [
+        State::Untestable,
+        State::Confounded,
+        State::Inconclusive,
+        State::Supported,
+        State::Refuted,
+    ] {
+        let sentence = state.sentence();
+        assert!(
+            sentence.starts_with("It ") && sentence.ends_with('.'),
+            "{sentence}"
+        );
+        assert!(
+            !sentence.contains("is passes") && !sentence.contains("is goes"),
+            "{sentence}"
+        );
+        assert_eq!(sentence.matches("runs").count(), 1, "{sentence}");
+    }
+    // A recorded hypothesis uses it.
+    let mut bench = Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-07");
+    let answer = bench.call(
+        "propose_hypothesis",
+        &serde_json::json!({"knob": "batch", "formula": "p50", "knob_change": "raise", "formula_moves": "up", "why": "A bigger batch does more work, so p50 rises."}),
+    );
+    assert!(
+        answer.contains("goes higher. It is inconclusive on these runs."),
+        "{answer}"
+    );
+    assert!(!answer.contains("On these runs it is"), "{answer}");
+}
+
+#[test]
+fn a_run_plan_names_the_two_settings_that_were_compared() {
+    use workbench::experiment_for;
+    // Runs opened in the order 4, 1, 8: the comparison is 1 against 8, and so is the plan.
+    let runs: Vec<Run> = [4, 1, 8, 4]
+        .iter()
+        .enumerate()
+        .map(|(index, batch)| Run {
+            name: format!("run {index}"),
+            seed: Some(index as i64),
+            knobs: [("batch".to_string(), Value::from(*batch))]
+                .into_iter()
+                .collect::<Map<_, _>>(),
+            identity: format!("id{index}"),
+        })
+        .collect();
+    let (shared, varying) = split_knobs(&runs);
+    let board = Board {
+        runs,
+        shared,
+        varying,
+        key: "k".into(),
+        method: "m".into(),
+        host: Arc::new(Latency),
+    };
+    let proposal = Proposal {
+        knob: "batch",
+        formula: "p50",
+        direction: "higher",
+        why: "More work per step.",
+    };
+    let hypothesis = propose(&board, &[], &[], &proposal, "2026-10-07").unwrap();
+    assert_eq!(
+        experiment_for(&board, &hypothesis, None, None).levels,
+        vec!["1".to_string(), "8".to_string()]
+    );
+    // One setting still plans a second of your choice.
+    let single = Board {
+        runs: board.runs[..1].to_vec(),
+        shared: board.runs[0].knobs.clone(),
+        varying: Vec::new(),
+        ..board.clone()
+    };
+    assert_eq!(
+        experiment_for(&single, &hypothesis, None, None).levels,
+        vec!["4".to_string(), "a second value of your choice".to_string()]
     );
 }
