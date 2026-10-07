@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use crate::bench::{
     Hypothesis, LearnedTool, Proposal, State, compare_knob, evaluate, experiment_for, learn_tool,
-    propose, record, seed_noise, test, wording_problem,
+    propose, record, seed_noise, test, wording_problem_naming,
 };
 use crate::board::Board;
 use crate::expr::catalogue;
@@ -412,7 +412,14 @@ Use at most ",
                 self.finished = true;
                 if note.trim().is_empty() {
                     (true, "Finished.".to_string())
-                } else if let Some(problem) = wording_problem(&note, NOTE_LIMIT) {
+                } else if let Some(problem) = {
+                    let tools = self.all_tools();
+                    wording_problem_naming(
+                        &note,
+                        NOTE_LIMIT,
+                        &crate::bench::allowed_names(&self.board, &tools),
+                    )
+                } {
                     self.note_dropped = true;
                     (
                         false,

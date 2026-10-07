@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+The workbench's wording fence lets a host's measure and learned-tool names through when they carry digits, as ScalarScope's `p50` and `p99` do. Only an exact whole name passes: `99th`, `p99x` and `p 99` are still refused. When a host has such names, a digit refusal says which ones may be written. RunForge's measures have no digits, so its fence reads exactly as before.
+
 The workbench moved into a crate of its own, `crates/workbench`, so ScalarScope can share it. The formula language, the hypotheses and their evidence, the session and the local-model loop live there behind a small interface: a host hands over its runs with their knobs and names and computes its own measures. RunForge's loss measures, its recipes and its memory file stay in `runforge-core`, and the window behaves as before. The loop now reads Ollama's digest for the model it chose, and the status line shows it beside the model's name. Every RunForge test moved with the code it tests and still passes.
 
 The README, the landing page, and the handbook describe the instrument, the report and the workbench; the handbook gains a workbench page and a reference of hypothesis states, verdicts and limits. Coverage is 93.8% of lines, with each pull request's new lines also held to 90%. No package has been submitted to Partner Center.
