@@ -61,6 +61,7 @@ fn run_bench(port: u16, mut bench: Workbench) -> BenchReply {
     let mut reminded = false;
     for round in 0..MAX_ROUNDS {
         let phase = Phase::of(round);
+        bench.round = round;
         if round > 0 && Phase::of(round - 1) != phase {
             messages
                 .push(serde_json::json!({"role": "user", "content": bench.phase_prompt(phase)}));
@@ -650,6 +651,8 @@ mod tests {
         assert_eq!(stopped, "The model finished.");
         assert_eq!(bench.steps.len(), 2);
         assert!(bench.steps[0].result.contains("seed noise"));
+        // Each step says which round it came in.
+        assert_eq!((bench.steps[0].round, bench.steps[1].round), (0, 1));
         assert_eq!(
             bench.note.as_deref(),
             Some("Only the seed changed, so no knob can be weighed.")

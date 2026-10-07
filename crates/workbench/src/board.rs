@@ -27,6 +27,14 @@ pub trait Host: Send + Sync {
     fn knob_label(&self, key: &str) -> String {
         key.to_string()
     }
+    /// How the `why` of a hypothesis is asked for, in the tool schema.
+    fn reason_hint(&self) -> &str {
+        "The mechanism you suspect, in words, with no numbers."
+    }
+    /// How the closing note is asked for, in the tool schema.
+    fn note_hint(&self) -> &str {
+        "What you looked at and what is still open, in words, with no numbers."
+    }
     /// Knob keys in the order the opening lists them.
     fn knob_keys<'a>(&self, knobs: &'a Map<String, Value>) -> Vec<&'a str> {
         let mut keys: Vec<&str> = knobs.keys().map(String::as_str).collect();

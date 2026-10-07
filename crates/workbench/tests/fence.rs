@@ -42,6 +42,9 @@ impl Host for Latency {
     fn measures(&self) -> &[Measure] {
         MEASURES
     }
+    fn reason_hint(&self) -> &str {
+        "in words; name a measure by its name, such as p99, and write no other numbers"
+    }
     fn measure(&self, run: usize, name: &str, _args: &[f64]) -> Result<f64, String> {
         let base = 10.0 + run as f64;
         Ok(match name {
@@ -171,4 +174,20 @@ fn a_reason_and_a_note_may_name_measures_and_learned_tools() {
         &serde_json::json!({"note": "p99 rose with the batch; p50 too."}),
     );
     assert_eq!(kept, "Finished. Your note is kept.");
+}
+
+#[test]
+fn a_host_words_its_own_reason_hint_and_others_keep_the_default() {
+    let bench = Workbench::new(board(), Vec::new(), Vec::new(), "2026-10-07");
+    let specs = bench.tool_specs();
+    let why = &specs[3]["function"]["parameters"]["properties"]["why"]["description"];
+    assert_eq!(
+        why,
+        "in words; name a measure by its name, such as p99, and write no other numbers"
+    );
+    let note = &specs[4]["function"]["parameters"]["properties"]["note"]["description"];
+    assert_eq!(
+        note,
+        "What you looked at and what is still open, in words, with no numbers."
+    );
 }

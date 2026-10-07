@@ -17,6 +17,10 @@ mod tests {
         bench_board(&runforge_board())
     }
 
+    pub(super) fn runforge_board_for_snapshot() -> Board {
+        runforge_board()
+    }
+
     fn runforge_board() -> Board {
         let run = |seed: i64, rank: i64, low: f64| {
             let mut recipe = Map::new();
@@ -169,5 +173,23 @@ mod tests {
         }
         assert!(capped.finished);
         assert_eq!(capped.steps.len(), MAX_CALLS);
+    }
+}
+
+#[cfg(test)]
+mod snapshot {
+    /// RunForge's tool schema, byte for byte, as it was before hosts could word their own
+    /// hints (`tests/fixtures/tool_specs.json`, written from the code at runforge 39c0ce7).
+    #[test]
+    fn runforge_tool_schema_is_byte_identical() {
+        let bench = super::Workbench::new(
+            crate::bench::bench_board(&super::tests::runforge_board_for_snapshot()),
+            Vec::new(),
+            Vec::new(),
+            "2026-10-06",
+        );
+        let now = serde_json::to_string_pretty(&bench.tool_specs()).unwrap() + "\n";
+        let then = include_str!("../tests/fixtures/tool_specs.json").replace("\r\n", "\n");
+        assert_eq!(now, then);
     }
 }
