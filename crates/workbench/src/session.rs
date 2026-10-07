@@ -97,6 +97,9 @@ impl Phase {
 /// One tool call and what the program answered.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Step {
+    /// The zero-based chat round the call came in. Calls in one round were all written
+    /// before the model read any of their answers.
+    pub round: usize,
     pub tool: String,
     pub args: String,
     pub ok: bool,
@@ -121,6 +124,8 @@ pub struct Workbench {
     /// A closing note that crossed the fence was dropped.
     pub note_dropped: bool,
     pub finished: bool,
+    /// The chat round now running, set by the loop.
+    pub round: usize,
     /// Runs RunForge had seen before this session; a hypothesis registered now excludes them.
     known_runs: Vec<String>,
 }
@@ -150,6 +155,7 @@ impl Workbench {
             note: None,
             note_dropped: false,
             finished: false,
+            round: 0,
             known_runs: Vec::new(),
         }
     }
@@ -249,7 +255,7 @@ impl Workbench {
                     "formula": formula,
                     "knob_change": {"type": "string", "enum": ["raise", "lower"], "description": "The change to the knob you have in mind."},
                     "formula_moves": {"type": "string", "enum": ["up", "down"], "description": "Which way you expect the formula to move after that change."},
-                    "why": {"type": "string", "description": "The mechanism you suspect, in words, with no numbers."}
+                    "why": {"type": "string", "description": self.board.host.reason_hint()}
                 }, "required": ["knob", "formula", "knob_change", "formula_moves", "why"]}
             }
         }));
@@ -259,7 +265,7 @@ impl Workbench {
                 "name": "finish",
                 "description": "End the session. Use it when you are done, or when the tools cannot answer.",
                 "parameters": {"type": "object", "properties": {
-                    "note": {"type": "string", "description": "What you looked at and what is still open, in words, with no numbers."}
+                    "note": {"type": "string", "description": self.board.host.note_hint()}
                 }, "required": ["note"]}
             }
         }));
@@ -438,6 +444,7 @@ Use at most ",
             ),
         };
         self.steps.push(Step {
+            round: self.round,
             tool: name.to_string(),
             args: serde_json::to_string(args).unwrap_or_default(),
             ok,

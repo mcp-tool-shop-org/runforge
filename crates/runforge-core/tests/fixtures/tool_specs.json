@@ -1,0 +1,145 @@
+[
+  {
+    "function": {
+      "description": "Evaluate a formula on every run and see the values.",
+      "name": "measure",
+      "parameters": {
+        "properties": {
+          "formula": {
+            "description": "A formula in the RunForge formula language, or a learned tool's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "formula"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Compare the runs at the lowest and highest setting of a knob that changed, on one formula.",
+      "name": "compare_knob",
+      "parameters": {
+        "properties": {
+          "formula": {
+            "description": "A formula in the RunForge formula language, or a learned tool's name.",
+            "type": "string"
+          },
+          "knob": {
+            "enum": [
+              "lora_r"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "knob",
+          "formula"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Keep a new formula as a named tool, when no measure says what you need. The program checks it first.",
+      "name": "learn_tool",
+      "parameters": {
+        "properties": {
+          "formula": {
+            "description": "A formula in the RunForge formula language, or a learned tool's name.",
+            "type": "string"
+          },
+          "meaning": {
+            "description": "What it measures, in one plain sentence.",
+            "type": "string"
+          },
+          "name": {
+            "description": "lowercase_with_underscores",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "formula",
+          "meaning"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Propose what a knob does to a formula. The program tests it and plans the runs that would settle it.",
+      "name": "propose_hypothesis",
+      "parameters": {
+        "properties": {
+          "formula": {
+            "description": "A formula in the RunForge formula language, or a learned tool's name.",
+            "type": "string"
+          },
+          "formula_moves": {
+            "description": "Which way you expect the formula to move after that change.",
+            "enum": [
+              "up",
+              "down"
+            ],
+            "type": "string"
+          },
+          "knob": {
+            "enum": [
+              "learning_rate",
+              "lora_r"
+            ],
+            "type": "string"
+          },
+          "knob_change": {
+            "description": "The change to the knob you have in mind.",
+            "enum": [
+              "raise",
+              "lower"
+            ],
+            "type": "string"
+          },
+          "why": {
+            "description": "The mechanism you suspect, in words, with no numbers.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "knob",
+          "formula",
+          "knob_change",
+          "formula_moves",
+          "why"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "End the session. Use it when you are done, or when the tools cannot answer.",
+      "name": "finish",
+      "parameters": {
+        "properties": {
+          "note": {
+            "description": "What you looked at and what is still open, in words, with no numbers.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]
