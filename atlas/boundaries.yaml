@@ -1,4 +1,4 @@
-summary: "A Windows instrument for fine-tuning runs: it draws every stored sample from a folder of run records, writes a report, and gives a local model a workbench. A Rust core library with an egui desktop app on top."
+summary: "A Windows instrument for fine-tuning runs: it draws every stored sample from a folder of run records, writes a report, and gives a local model a workbench. A Rust core library and a workbench crate shared with ScalarScope, with an egui desktop app on top."
 boundaries:
   - name: .cargo
     globs:
@@ -27,6 +27,10 @@ boundaries:
   - name: runforge-core
     globs:
       - crates/runforge-core/**
+    role: code
+  - name: workbench
+    globs:
+      - crates/workbench/**
     role: code
   - name: samples
     globs:

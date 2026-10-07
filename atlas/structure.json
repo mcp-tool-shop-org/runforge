@@ -59,7 +59,7 @@
       "externals": 0,
       "files": [
         {
-          "hash": "409b2d1dbd40d8b7c1d9b3f78e01b8329bd1bac86cec56e868734a929069b37b",
+          "hash": "8ef2a502aa24b912910fb0cf67224b7341caa01676d59700515347b339a4e80f",
           "path": "docs/CONTRACT.md"
         },
         {
@@ -79,7 +79,7 @@
           "path": "docs/sidecar-report.consult.md"
         },
         {
-          "hash": "8631de0cb917b92ab4d5ae8f4660b7733c2337c6e9597d0617afddd66add2230",
+          "hash": "eff02c129acd335580c59f75eba9f03217f73660118eb7731376cc7f74c1676a",
           "path": "docs/sidecar-workbench.md"
         }
       ],
@@ -162,7 +162,7 @@
           "path": "packaging/msix/Assets/Wide310x150Logo.scale-200.png"
         },
         {
-          "hash": "844f1988c51288ac33a987b530eb979092c75c1ae416d76a2cd1ed6bea0b9d3e",
+          "hash": "21a7d51736cc1b48925da1716c72bb7969f0c21bc6eb2b365939ec7226e47cd8",
           "path": "packaging/pack-msix.ps1"
         }
       ],
@@ -189,15 +189,15 @@
           "path": ".gitignore"
         },
         {
-          "hash": "a7086fa011bf3254774c129d6cc5c20c08742649a9691d7678a9ad7ee5c77614",
+          "hash": "80e08c772ed8e71206bce1c890ca6cb2074c91c0b84ad4a92fb3ef10587b9114",
           "path": "CHANGELOG.md"
         },
         {
-          "hash": "5bcff8d8f26d68b52dc29724ce7c2410e757c9aa080624a6623808ddb455fbea",
+          "hash": "91704b46b684d9c0d80799d4b8a20884177dbe155583c65227505de2c1a39ccf",
           "path": "Cargo.lock"
         },
         {
-          "hash": "0544ba24f7cfba3f5cc5c3630414c84be5da73d8773f1dcdc52506b46f26859f",
+          "hash": "51128f1f083b1abf471a1070a4c5316535aa4d4d664cb5b5dcdda84f2a42667f",
           "path": "Cargo.toml"
         },
         {
@@ -286,7 +286,7 @@
       "externals": 0,
       "files": [
         {
-          "hash": "0c394699e5c249780c22ccf7edc188480d288c0ed9f7a79cfa6c5e236603b421",
+          "hash": "ac89e41af8c88a824cccd6afd89941c6b406fefeba3e0ca90cc6c93da88c4b82",
           "path": "crates/runforge/Cargo.toml"
         },
         {
@@ -306,12 +306,7 @@
             {
               "in": "load_folder",
               "kind": "match-err",
-              "line": 186
-            },
-            {
-              "in": "load_folder",
-              "kind": "match-err",
-              "line": 190
+              "line": 187
             },
             {
               "in": "load_folder",
@@ -319,117 +314,122 @@
               "line": 191
             },
             {
-              "in": "load_series",
+              "in": "load_folder",
               "kind": "match-err",
-              "line": 220
+              "line": 192
             },
             {
               "in": "load_series",
               "kind": "match-err",
-              "line": 238
+              "line": 221
             },
             {
               "in": "load_series",
               "kind": "match-err",
-              "line": 244
+              "line": 239
             },
             {
               "in": "load_series",
               "kind": "match-err",
-              "line": 259
+              "line": 245
             },
             {
               "in": "load_series",
               "kind": "match-err",
-              "line": 263
+              "line": 260
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 264
             },
             {
               "in": "instrument",
               "kind": "match-err",
-              "line": 315
+              "line": 316
             },
             {
               "in": "poll_sidecar",
               "kind": "match-err",
-              "line": 359
+              "line": 366
             },
             {
               "in": "poll_sidecar",
               "kind": "match-err",
-              "line": 360
+              "line": 367
             },
             {
               "in": "keep_session",
               "kind": "match-err",
-              "line": 387
+              "line": 394
             },
             {
               "in": "retest_hypotheses",
               "kind": "match-err",
-              "line": 426
+              "line": 433
             },
             {
               "in": "set_theme",
               "kind": "match-err",
-              "line": 441
+              "line": 448
             },
             {
               "in": "save_text",
               "kind": "match-err",
-              "line": 452
+              "line": 459
             },
             {
               "in": "begin",
               "kind": "err",
-              "line": 745
+              "line": 752
             },
             {
               "in": "begin",
               "kind": "err",
-              "line": 749
+              "line": 756
             },
             {
               "in": "begin",
               "kind": "err",
-              "line": 753
+              "line": 760
             },
             {
               "in": "on_train",
               "kind": "match-err",
-              "line": 803
+              "line": 810
             },
             {
               "in": "on_train",
-              "kind": "match-err",
-              "line": 817
-            },
-            {
-              "in": "on_eval",
               "kind": "match-err",
               "line": 824
             },
             {
               "in": "on_eval",
               "kind": "match-err",
-              "line": 838
+              "line": 831
             },
             {
-              "in": "on_export",
+              "in": "on_eval",
               "kind": "match-err",
               "line": 845
             },
             {
               "in": "on_export",
               "kind": "match-err",
-              "line": 863
+              "line": 852
+            },
+            {
+              "in": "on_export",
+              "kind": "match-err",
+              "line": 870
             },
             {
               "in": "launch",
               "kind": "match-err",
-              "line": 883
+              "line": 890
             }
           ],
-          "hash": "78b181505d36ee03adca2f9d834d5f62e2412aadcb3cab46b772dfbeb7768199",
+          "hash": "b706325ccee942944e1d64c60f741abfbf036c35b7aae6c46112b6a58c109eb6",
           "importsFiles": [
             "crates/runforge-core/src/lib.rs",
             "crates/runforge/src/instrument.rs",
@@ -441,14 +441,14 @@
             {
               "calls": [
                 {
-                  "line": 944,
+                  "line": 951,
                   "name": "finite_points",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
                   }
                 },
                 {
-                  "line": 965,
+                  "line": 972,
                   "name": "curve_segments",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
@@ -456,7 +456,7 @@
                   "via": "draw_series"
                 },
                 {
-                  "line": 973,
+                  "line": 980,
                   "name": "finite_points",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
@@ -472,14 +472,14 @@
             {
               "calls": [
                 {
-                  "line": 965,
+                  "line": 972,
                   "name": "curve_segments",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
                   }
                 },
                 {
-                  "line": 973,
+                  "line": 980,
                   "name": "finite_points",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
@@ -494,7 +494,7 @@
             {
               "calls": [
                 {
-                  "line": 992,
+                  "line": 999,
                   "name": "format_f64",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
@@ -509,7 +509,7 @@
             {
               "calls": [
                 {
-                  "line": 1015,
+                  "line": 1022,
                   "name": "format_f64",
                   "target": {
                     "file": "crates/runforge-core/src/lib.rs"
@@ -714,73 +714,7 @@
           "testsInside": true
         },
         {
-          "exports": [
-            "can_call_tools",
-            "candidates",
-            "chat_message",
-            "local_model_names",
-            "start_bench",
-            "start_bench_on",
-            "tool_calls"
-          ],
-          "failurePaths": [
-            {
-              "in": "run_bench",
-              "kind": "match-err",
-              "line": 45
-            },
-            {
-              "in": "run_bench",
-              "kind": "match-err",
-              "line": 74
-            },
-            {
-              "in": "run_bench",
-              "kind": "match-err",
-              "line": 84
-            },
-            {
-              "in": "run_bench",
-              "kind": "match-err",
-              "line": 91
-            },
-            {
-              "in": "chat_message",
-              "kind": "err",
-              "line": 201
-            },
-            {
-              "in": "http",
-              "kind": "err",
-              "line": 246
-            },
-            {
-              "in": "http",
-              "kind": "err",
-              "line": 248
-            },
-            {
-              "in": "exchange",
-              "kind": "match-err",
-              "line": 286
-            },
-            {
-              "in": "exchange",
-              "kind": "match-err",
-              "line": 287
-            },
-            {
-              "in": "exchange",
-              "kind": "err",
-              "line": 287
-            },
-            {
-              "in": "decode_chunks",
-              "kind": "err",
-              "line": 350
-            }
-          ],
-          "hash": "174224a476f64d4a894474433846d526a77873f63d01c39e475b1f9035f653fd",
+          "hash": "7037a73051c67e2daaea623515492ec150465e7e9f9470436ed75fc4ef48347f",
           "importsFiles": [
             "crates/runforge-core/src/lib.rs"
           ],
@@ -822,128 +756,42 @@
       "externals": 0,
       "files": [
         {
-          "hash": "3d5d9adcf1e31ec826d6185850cd3f856d8b4cd3dfc77f3636d99fdaf8e17739",
+          "hash": "23ba14857df9869abf302e3fa910ccacd737725ad136421668fa00dc3cb3f5f5",
           "path": "crates/runforge-core/Cargo.toml"
         },
         {
           "exports": [
+            "bench_board",
             "board_method",
             "compare_knob",
             "evaluate",
-            "evidence",
-            "exact_p",
             "experiment_for",
-            "lambda_for",
             "learn_tool",
-            "note_new_folder",
             "note_use",
-            "parse_with_library",
-            "permutation_e",
             "propose",
             "read_book",
             "read_hypotheses",
             "read_tools",
-            "reason_allowed",
-            "record",
             "run_fingerprint",
             "seed_noise",
-            "seeds_needed",
             "test",
             "test_all",
-            "threshold",
-            "verdicts",
-            "wording_problem",
             "write_book",
             "write_hypotheses",
             "write_tools"
           ],
-          "failurePaths": [
-            {
-              "in": "lines",
-              "kind": "match-err",
-              "line": 100
-            },
-            {
-              "in": "compare_knob",
-              "kind": "err",
-              "line": 251
-            },
-            {
-              "in": "compare_knob",
-              "kind": "err",
-              "line": 277
-            },
-            {
-              "in": "test",
-              "kind": "match-err",
-              "line": 571
-            },
-            {
-              "in": "test",
-              "kind": "match-err",
-              "line": 575
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 836
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 844
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 852
-            },
-            {
-              "in": "learn_tool",
-              "kind": "match-err",
-              "line": 857
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 858
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 865
-            },
-            {
-              "in": "learn_tool",
-              "kind": "err",
-              "line": 870
-            },
-            {
-              "in": "propose",
-              "kind": "err",
-              "line": 993
-            },
-            {
-              "in": "propose",
-              "kind": "err",
-              "line": 999
-            },
-            {
-              "in": "propose",
-              "kind": "err",
-              "line": 1003
-            },
-            {
-              "in": "propose",
-              "kind": "err",
-              "line": 1010
-            }
-          ],
-          "hash": "b84019524e6f042544d0bf0fa0cf8badbb097162ac4d4f4daf2e6da4ceedee12",
-          "importsFiles": [
+          "hash": "f84fc1bcd2b046fe08eed970eb76cd63b506d12b669fd285ea4e9f9d09806cdc",
+          "importOrder": [
+            "crates/workbench/src/lib.rs",
             "crates/runforge-core/src/expr.rs",
             "crates/runforge-core/src/ledger.rs",
             "crates/runforge-core/src/series.rs"
+          ],
+          "importsFiles": [
+            "crates/runforge-core/src/expr.rs",
+            "crates/runforge-core/src/ledger.rs",
+            "crates/runforge-core/src/series.rs",
+            "crates/workbench/src/lib.rs"
           ],
           "path": "crates/runforge-core/src/bench.rs"
         },
@@ -968,153 +816,43 @@
           "path": "crates/runforge-core/src/export.rs"
         },
         {
-          "exports": [
-            "canonical",
-            "eval",
-            "parse",
-            "parse_open",
-            "quantile"
-          ],
           "failurePaths": [
             {
-              "in": "parse_open",
+              "in": "measure",
               "kind": "err",
-              "line": 177
-            },
-            {
-              "in": "parse_raw",
-              "kind": "err",
-              "line": 185
-            },
-            {
-              "in": "parse_raw",
-              "kind": "err",
-              "line": 195
-            },
-            {
-              "in": "expand",
-              "kind": "err",
-              "line": 208
-            },
-            {
-              "in": "expand",
-              "kind": "err",
-              "line": 211
-            },
-            {
-              "in": "eval",
-              "kind": "err",
-              "line": 264
-            },
-            {
-              "in": "tokenize",
-              "kind": "err",
-              "line": 326
-            },
-            {
-              "in": "tokenize",
-              "kind": "err",
-              "line": 331
-            },
-            {
-              "in": "tokenize",
-              "kind": "err",
-              "line": 339
-            },
-            {
-              "in": "tokenize",
-              "kind": "err",
-              "line": 343
-            },
-            {
-              "in": "part",
-              "kind": "err",
-              "line": 372
-            },
-            {
-              "in": "deep",
-              "kind": "err",
-              "line": 380
-            },
-            {
-              "in": "atom",
-              "kind": "err",
-              "line": 462
-            },
-            {
-              "in": "atom",
-              "kind": "err",
-              "line": 472
-            },
-            {
-              "in": "atom",
-              "kind": "err",
-              "line": 476
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 496
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 499
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 500
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 504
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 507
-            },
-            {
-              "in": "check_names",
-              "kind": "err",
-              "line": 513
-            },
-            {
-              "in": "eval",
-              "kind": "err",
-              "line": 593
+              "line": 135
             },
             {
               "in": "measure",
               "kind": "err",
-              "line": 644
-            },
-            {
-              "in": "call",
-              "kind": "err",
-              "line": 651
+              "line": 242
             },
             {
               "in": "windowed",
               "kind": "err",
-              "line": 693
+              "line": 262
             },
             {
               "in": "windowed",
               "kind": "err",
-              "line": 701
+              "line": 270
             },
             {
               "in": "windowed",
               "kind": "err",
-              "line": 722
+              "line": 291
             }
           ],
-          "hash": "ad7059029fece13d1950e2e796f97e79691817a34e9f2793072c0f3f4d5e9c64",
+          "hash": "b314bce271503dd288f286910322778c76958d195ead98e0cb43d0284af71f78",
+          "importOrder": [
+            "crates/workbench/src/lib.rs",
+            "crates/runforge-core/src/series.rs",
+            "crates/runforge-core/src/bench.rs"
+          ],
           "importsFiles": [
-            "crates/runforge-core/src/series.rs"
+            "crates/runforge-core/src/bench.rs",
+            "crates/runforge-core/src/series.rs",
+            "crates/workbench/src/lib.rs"
           ],
           "path": "crates/runforge-core/src/expr.rs",
           "testsInside": true
@@ -1165,7 +903,12 @@
           "path": "crates/runforge-core/src/ledger.rs"
         },
         {
-          "hash": "f0bca9d04d8053e0b549385f7e425c618945b53c9d281978b0cf6718fd272ecc",
+          "entry": "parse_formula",
+          "entryRule": 4,
+          "exports": [
+            "parse_formula"
+          ],
+          "hash": "6bec67c85c9eda2c31b67f746bd618b9550cbfe7d52306f25c5b98bcac6edb08",
           "importsFiles": [
             "crates/runforge-core/src/bench.rs",
             "crates/runforge-core/src/error.rs",
@@ -1179,9 +922,27 @@
             "crates/runforge-core/src/series.rs",
             "crates/runforge-core/src/session.rs",
             "crates/runforge-core/src/time.rs",
-            "crates/runforge-core/src/weigh.rs"
+            "crates/runforge-core/src/weigh.rs",
+            "crates/workbench/src/lib.rs"
           ],
-          "path": "crates/runforge-core/src/lib.rs"
+          "path": "crates/runforge-core/src/lib.rs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "line": 39,
+                  "name": "parse",
+                  "target": {
+                    "file": "crates/workbench/src/lib.rs"
+                  }
+                }
+              ],
+              "exported": true,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "parse_formula"
+            }
+          ]
         },
         {
           "exports": [
@@ -1221,7 +982,7 @@
             "report_file_name",
             "utc_date"
           ],
-          "hash": "8fe1e77faa190ea51e32ae5b711d4351ebb4e4581055ec12cf87930c9f7d903b",
+          "hash": "9ad9d342a4d822d24385dbd88ef0061fc009247e1804d73e8e94b95c81d18d37",
           "importsFiles": [
             "crates/runforge-core/src/bench.rs",
             "crates/runforge-core/src/ledger.rs",
@@ -1266,7 +1027,7 @@
               "line": 150
             }
           ],
-          "hash": "37d70ff929b4c6b0f726e0e46440c61d2adbc0e9597ba7d2323d912d61858792",
+          "hash": "7afe5585f86d40e483526761bbd2fd3e3e9a557a44a69e022b595cd85ed98ab0",
           "importsFiles": [
             "crates/runforge-core/src/error.rs",
             "crates/runforge-core/src/export.rs",
@@ -1275,41 +1036,16 @@
           "path": "crates/runforge-core/src/series.rs"
         },
         {
-          "exports": [
-            "direction_of"
+          "hash": "9424aa120cd65a9fb666fdb54c07b119fe01673235a554f6fb9015b04c3ef65e",
+          "importOrder": [
+            "crates/workbench/src/lib.rs",
+            "crates/runforge-core/src/bench.rs",
+            "crates/runforge-core/src/series.rs"
           ],
-          "failurePaths": [
-            {
-              "in": "measure",
-              "kind": "match-err",
-              "line": 457
-            },
-            {
-              "in": "compare",
-              "kind": "match-err",
-              "line": 465
-            },
-            {
-              "in": "compare",
-              "kind": "match-err",
-              "line": 512
-            },
-            {
-              "in": "learn",
-              "kind": "match-err",
-              "line": 532
-            },
-            {
-              "in": "hypothesize",
-              "kind": "match-err",
-              "line": 558
-            }
-          ],
-          "hash": "6749fdec6f79aa856afd1c02b54c2f58df8984bb96b7a7a7ca70fc8e0b26d0ca",
           "importsFiles": [
             "crates/runforge-core/src/bench.rs",
-            "crates/runforge-core/src/expr.rs",
-            "crates/runforge-core/src/series.rs"
+            "crates/runforge-core/src/series.rs",
+            "crates/workbench/src/lib.rs"
           ],
           "path": "crates/runforge-core/src/session.rs",
           "testsInside": true
@@ -1335,7 +1071,7 @@
           "testsInside": true
         },
         {
-          "hash": "06bf6466c132b0a5401414af1b84362a967baeb7b9e94fba18dbe7d247167a04",
+          "hash": "6e26e0c6d08690e6bbbe9a01e18bc3215ab1cffd7253bec4e8331b99ccc295a8",
           "importsFiles": [
             "crates/runforge-core/src/lib.rs"
           ],
@@ -1350,15 +1086,6 @@
           ],
           "library": "crates/runforge-core/src/lib.rs",
           "path": "crates/runforge-core/tests/edges.rs",
-          "testsInside": true
-        },
-        {
-          "hash": "62e45189d0aee44b6dcec557ae853137196050f420bd2da4f7d8f33fca154cad",
-          "importsFiles": [
-            "crates/runforge-core/src/lib.rs"
-          ],
-          "library": "crates/runforge-core/src/lib.rs",
-          "path": "crates/runforge-core/tests/evidence.rs",
           "testsInside": true
         },
         {
@@ -1401,7 +1128,7 @@
       "testRunners": [
         "cargo test"
       ],
-      "testedBy": 11,
+      "testedBy": 10,
       "unresolvedSites": 0
     },
     {
@@ -1528,7 +1255,7 @@
           "path": "site/src/content.config.ts"
         },
         {
-          "hash": "287d6d5b2bbcf5812e22c9e34d0eb30f41566dada08043b91ed3d68aad942412",
+          "hash": "bc3fbb026dbac32d8d21528f581123031ea5ec6889ba42fab0677cbe4b526a9f",
           "path": "site/src/content/docs/handbook/architecture.md"
         },
         {
@@ -1594,11 +1321,475 @@
       "role": "site",
       "testedBy": 0,
       "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 1,
+      "entryPoints": [
+        "crates/workbench/src/lib.rs"
+      ],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "9ad838ed39b36499f37c4a2aa045619d1ac34243282cce0418437823743910a3",
+          "path": "crates/workbench/Cargo.toml"
+        },
+        {
+          "exports": [
+            "compare_knob",
+            "evaluate",
+            "evidence",
+            "exact_p",
+            "experiment_for",
+            "lambda_for",
+            "learn_tool",
+            "note_new_folder",
+            "note_use",
+            "parse_with_library",
+            "permutation_e",
+            "propose",
+            "read_book",
+            "read_hypotheses",
+            "read_tools",
+            "reason_allowed",
+            "record",
+            "seed_noise",
+            "seeds_needed",
+            "test",
+            "test_all",
+            "threshold",
+            "verdicts",
+            "wording_problem",
+            "write_book",
+            "write_hypotheses",
+            "write_tools"
+          ],
+          "failurePaths": [
+            {
+              "in": "lines",
+              "kind": "match-err",
+              "line": 100
+            },
+            {
+              "in": "compare_knob",
+              "kind": "err",
+              "line": 256
+            },
+            {
+              "in": "compare_knob",
+              "kind": "err",
+              "line": 282
+            },
+            {
+              "in": "test",
+              "kind": "match-err",
+              "line": 581
+            },
+            {
+              "in": "test",
+              "kind": "match-err",
+              "line": 585
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 837
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 847
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 855
+            },
+            {
+              "in": "learn_tool",
+              "kind": "match-err",
+              "line": 860
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 861
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 868
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 873
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 996
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 1002
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 1006
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 1013
+            }
+          ],
+          "hash": "fc5de1ef37f1fb5ffd15b791f1d5465a28f72038a98304e7fc77601860a75def",
+          "importsFiles": [
+            "crates/workbench/src/board.rs",
+            "crates/workbench/src/expr.rs",
+            "crates/workbench/src/format.rs"
+          ],
+          "path": "crates/workbench/src/bench.rs"
+        },
+        {
+          "exports": [
+            "split_knobs"
+          ],
+          "hash": "ef6a80c7887f4ee44117c99e759b1d574fe083590d9dccb54417422a493207a5",
+          "importsFiles": [
+            "crates/workbench/src/expr.rs",
+            "crates/workbench/src/testing.rs"
+          ],
+          "path": "crates/workbench/src/board.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "canonical",
+            "catalogue",
+            "eval",
+            "parse",
+            "parse_open",
+            "quantile"
+          ],
+          "failurePaths": [
+            {
+              "in": "parse_open",
+              "kind": "err",
+              "line": 121
+            },
+            {
+              "in": "parse_raw",
+              "kind": "err",
+              "line": 129
+            },
+            {
+              "in": "parse_raw",
+              "kind": "err",
+              "line": 139
+            },
+            {
+              "in": "expand",
+              "kind": "err",
+              "line": 153
+            },
+            {
+              "in": "expand",
+              "kind": "err",
+              "line": 156
+            },
+            {
+              "in": "eval",
+              "kind": "err",
+              "line": 208
+            },
+            {
+              "in": "eval_inner",
+              "kind": "err",
+              "line": 218
+            },
+            {
+              "in": "eval_inner",
+              "kind": "err",
+              "line": 237
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 318
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 323
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 331
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 335
+            },
+            {
+              "in": "part",
+              "kind": "err",
+              "line": 364
+            },
+            {
+              "in": "deep",
+              "kind": "err",
+              "line": 372
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 454
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 464
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 468
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 483
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 486
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 487
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 491
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 494
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 500
+            }
+          ],
+          "hash": "b2b4a9ac23f0a3a1b1fc027ed4548299d703d848b3a9e8e8f8759dc2e96df0d9",
+          "importsFiles": [
+            "crates/workbench/src/board.rs"
+          ],
+          "path": "crates/workbench/src/expr.rs"
+        },
+        {
+          "exports": [
+            "format_measure",
+            "knob_text",
+            "read_memory",
+            "write_memory"
+          ],
+          "hash": "262644a007e2d422398df86d83a529f7c86b5f3de0ffb09ccdad4b7506848885",
+          "path": "crates/workbench/src/format.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "3dd6a0dc8245f54c853764b76e10219b7add706708ed9d32b2285c4f06a6a256",
+          "importsFiles": [
+            "crates/workbench/src/bench.rs",
+            "crates/workbench/src/board.rs",
+            "crates/workbench/src/expr.rs",
+            "crates/workbench/src/format.rs",
+            "crates/workbench/src/ollama.rs",
+            "crates/workbench/src/session.rs",
+            "crates/workbench/src/testing.rs"
+          ],
+          "path": "crates/workbench/src/lib.rs"
+        },
+        {
+          "exports": [
+            "can_call_tools",
+            "candidates",
+            "chat_message",
+            "local_model_names",
+            "model_digest",
+            "start_bench",
+            "start_bench_on",
+            "tool_calls"
+          ],
+          "failurePaths": [
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 47
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 78
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 88
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 95
+            },
+            {
+              "in": "chat_message",
+              "kind": "err",
+              "line": 206
+            },
+            {
+              "in": "http",
+              "kind": "err",
+              "line": 251
+            },
+            {
+              "in": "http",
+              "kind": "err",
+              "line": 253
+            },
+            {
+              "in": "exchange",
+              "kind": "match-err",
+              "line": 291
+            },
+            {
+              "in": "exchange",
+              "kind": "match-err",
+              "line": 292
+            },
+            {
+              "in": "exchange",
+              "kind": "err",
+              "line": 292
+            },
+            {
+              "in": "decode_chunks",
+              "kind": "err",
+              "line": 355
+            }
+          ],
+          "hash": "3a2bf3ea6e742f1a7fe99b75c46c26aac5af09fc8a4a1f156fbac7e79c5d20b5",
+          "importsFiles": [
+            "crates/workbench/src/session.rs",
+            "crates/workbench/src/testing.rs"
+          ],
+          "path": "crates/workbench/src/ollama.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "direction_of"
+          ],
+          "failurePaths": [
+            {
+              "in": "measure",
+              "kind": "match-err",
+              "line": 474
+            },
+            {
+              "in": "compare",
+              "kind": "match-err",
+              "line": 482
+            },
+            {
+              "in": "compare",
+              "kind": "match-err",
+              "line": 529
+            },
+            {
+              "in": "learn",
+              "kind": "match-err",
+              "line": 549
+            },
+            {
+              "in": "hypothesize",
+              "kind": "match-err",
+              "line": 575
+            }
+          ],
+          "hash": "080dabf8efda971be4ef22ce14084400d283476a2e47225ba4974045b14c682a",
+          "importsFiles": [
+            "crates/workbench/src/bench.rs",
+            "crates/workbench/src/board.rs",
+            "crates/workbench/src/expr.rs",
+            "crates/workbench/src/format.rs"
+          ],
+          "path": "crates/workbench/src/session.rs"
+        },
+        {
+          "exports": [
+            "board",
+            "seeds_board"
+          ],
+          "hash": "d34d2f4bd37cdfd7d19c3d5c4e2e90eabc60264cb2f78ac30045ba2f746d649e",
+          "importsFiles": [
+            "crates/workbench/src/board.rs",
+            "crates/workbench/src/expr.rs"
+          ],
+          "path": "crates/workbench/src/testing.rs"
+        },
+        {
+          "hash": "c339875c6183c5ae3e4db76503141be5abcaaea31efa7f35f2b0061264707ddf",
+          "importsFiles": [
+            "crates/workbench/src/lib.rs"
+          ],
+          "library": "crates/workbench/src/lib.rs",
+          "path": "crates/workbench/tests/evidence.rs",
+          "testsInside": true
+        }
+      ],
+      "globs": [
+        "crates/workbench/**"
+      ],
+      "importConfidence": "full",
+      "name": "workbench",
+      "origin": "authored",
+      "outsidePlaces": [
+        {
+          "reads": 1,
+          "where": [
+            "caller"
+          ],
+          "writes": 1
+        }
+      ],
+      "outsideReads": 1,
+      "outsideWrites": 1,
+      "role": "code",
+      "testRunners": [
+        "cargo test"
+      ],
+      "testedBy": 8,
+      "unresolvedSites": 0
     }
   ],
   "doors": [
     {
-      "checksCount": 1,
+      "checksCount": 2,
       "commands": [
         {
           "dir": "",
@@ -1722,7 +1913,12 @@
         {
           "boundary": "runforge-core",
           "depth": 0,
-          "files": 19
+          "files": 18
+        },
+        {
+          "boundary": "workbench",
+          "depth": 0,
+          "files": 9
         }
       ],
       "readers": [],
@@ -1832,9 +2028,45 @@
           "path": "crates/runforge/src/store.rs",
           "runKind": "executes",
           "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/workbench/src/board.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/workbench/src/format.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/workbench/src/lib.rs",
+          "runKind": "checks",
+          "via": "cargo clippy"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/workbench/src/ollama.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "directory": true,
+          "job": "test",
+          "matched": true,
+          "path": "crates/workbench/tests/",
+          "runKind": "executes",
+          "via": "cargo test"
         }
       ],
-      "runsCount": 14,
+      "runsCount": 19,
       "secrets": [],
       "sends": {
         "deploysPages": false,
@@ -1850,7 +2082,7 @@
       "tests": [
         {
           "coverage": true,
-          "files": 17,
+          "files": 20,
           "job": "test",
           "runner": "cargo test",
           "step": "Test"
@@ -2046,6 +2278,15 @@
             "from": "crates/runforge/src/main.rs"
           },
           "files": 14
+        },
+        {
+          "boundary": "workbench",
+          "depth": 2,
+          "enters": {
+            "file": "crates/workbench/src/lib.rs",
+            "from": "crates/runforge-core/src/lib.rs"
+          },
+          "files": 8
         }
       ],
       "readers": [],
@@ -2079,12 +2320,17 @@
       "from": "runforge",
       "kind": "file",
       "to": "runforge-core"
+    },
+    {
+      "from": "runforge-core",
+      "kind": "file",
+      "to": "workbench"
     }
   ],
   "engine": "1.24.0",
   "generatedFrom": {
-    "commit": "c0c5042883fd40d2bd39c0b6cde793c52bc6f325",
-    "tracked": 105
+    "commit": "8d5955e254d0e3ab79ddcd482379710daacc848d",
+    "tracked": 114
   },
   "landings": [
     {
@@ -2128,6 +2374,27 @@
     {
       "readers": [
         {
+          "by": "Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        },
+        {
+          "by": "crates/runforge-core/Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        },
+        {
+          "by": "crates/runforge/Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        }
+      ],
+      "target": "crates/workbench",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
           "by": "packaging/pack-msix.ps1",
           "call": "Copy-Item",
           "confidence": "text"
@@ -2162,6 +2429,6 @@
   "overlaps": [],
   "submodules": [],
   "symlinks": [],
-  "testFiles": 16,
+  "testFiles": 19,
   "unassigned": []
 }
