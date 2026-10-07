@@ -2,7 +2,7 @@
 
 The sidecar is a workbench. A local model investigates the open runs by calling tools. It builds new formula tools when the ones it has don't answer its question, and it proposes hypotheses about what each knob does. The program computes every number, sets every verdict, and writes every sentence that carries a number. The model chooses what to look at and puts its reasoning into words. Its words are fenced.
 
-This document records the design, the evidence behind it, and what is deferred. Code: `crates/runforge-core/src/{expr,bench,session}.rs` and `crates/runforge/src/sidecar.rs`.
+This document records the design, the evidence behind it, and what is deferred. Code: the shared `workbench` crate (`crates/workbench/src/{expr,bench,session,ollama}.rs`), which ScalarScope also uses, and RunForge's side of it: the loss measures in `crates/runforge-core/src/expr.rs` and the hand-over in `crates/runforge-core/src/bench.rs`.
 
 ## Standards compliance
 
@@ -10,10 +10,10 @@ Scored 0 to 3 against the six workflow standards.
 
 | Standard | Score | Evidence |
 |---|---|---|
-| PIN_PER_STEP | 2 | Each session pins the model choice (preference order, plus Ollama's `tools` capability), temperature 0.2, `think` off, the phase prompts and the tool schemas, all in code. Each `Step` records the tool, its arguments and the program's answer. What it lacks for a 3: the model name and digest are not saved with the trace. |
+| PIN_PER_STEP | 2 | Each session pins the model choice (preference order, plus Ollama's `tools` capability), temperature 0.2, `think` off, the phase prompts and the tool schemas, all in code. Each `Step` records the tool, its arguments and the program's answer. The reply names the model and Ollama's digest for it, and the status line shows both. What it lacks for a 3: they are not yet saved with the trace. |
 | ANDON_AUTHORITY | 3 | Every call is validated before it runs: tool name, knob enum, formula grammar and size, finiteness on every run, duplicate checks, and the wording fence. A refusal goes back to the model as a sentence and nothing is kept. The loop stops at the round and call caps. Tested in `session.rs`, `bench.rs` and `sidecar.rs`, including a fake-Ollama end-to-end test. |
 | NAMED_COMPENSATORS | 2 | The session's only writes are to `sidecar-memory.json` beside the preferences: learned tools (`tools`) and hypotheses (`hypotheses`). The table below gives the undo for each. Nothing is published, trained or fetched. |
-| DECOMPOSE_BY_SECRETS | 3 | What changes together stays together. The formula language (`expr`) knows nothing about tools or models. The statistics and verdicts (`bench`) know nothing about chat. The session (`session`) knows nothing about HTTP. The HTTP loop (`sidecar`) knows nothing about statistics. Each has its own tests. |
+| DECOMPOSE_BY_SECRETS | 3 | What changes together stays together. The workbench crate knows nothing about losses: a host names its measures and computes them behind the `Host` trait. The formula language (`expr`) knows nothing about tools or models. The statistics and verdicts (`bench`) know nothing about chat. The session (`session`) knows nothing about HTTP. The HTTP loop (`sidecar`) knows nothing about statistics. Each has its own tests. |
 | UNCERTAINTY_GATED_HUMANS | 3 | A verdict across folders (supported or refuted) needs the combined e-value to pass e-BH at a 5% false discovery rate across the whole bench. The folder a hypothesis was proposed on never counts. Everything else is open, with the evidence so far and the threshold printed, plus a run plan. Validity is tested exactly (the e-value averages 1 over every relabeling) and by simulation (Ville's bound under no effect). The pane labels the model's note as its words, not a measurement. |
 | EXTERNAL_VERIFIER | n/a | No specialized claims. The statistics are textbook (Mann-Whitney, Holm, Vargha-Delaney, Colas power), and their values are pinned in tests. |
 
@@ -118,4 +118,4 @@ Tests pin the exact average of 1 over every relabeling, including with ties and 
 
 - **A block-bootstrap interval for a run's window median** (Efron 1979). Adjacent samples are correlated, so it needs a block length.
 - **Tool retrieval by description, and merging near-duplicates into parameterized tools** (CRAFT, ToolLibGen). These matter once a library holds dozens of tools.
-- **Recording the model's name and digest with each trace**, which would raise PIN_PER_STEP to 3.
+- **Saving the model's name and digest with each trace.** The loop reads the digest now; keeping it with the trace would raise PIN_PER_STEP to 3.

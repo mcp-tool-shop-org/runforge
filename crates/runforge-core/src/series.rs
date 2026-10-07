@@ -96,7 +96,7 @@ const RECIPE_ORDER: &[&str] = &[
     "target_modules",
 ];
 
-const MEMORY_FILE: &str = "sidecar-memory.json";
+pub(crate) const MEMORY_FILE: &str = "sidecar-memory.json";
 
 /// A short label for a finite measurement. Trailing zeros are dropped.
 pub fn format_measure(value: f64) -> String {

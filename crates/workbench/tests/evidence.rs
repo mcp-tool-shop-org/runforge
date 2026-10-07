@@ -1,7 +1,7 @@
 //! The e-values must be valid, not just plausible. These tests check the
 //! defining property exactly, then Ville's bound by simulation.
 
-use runforge_core::{
+use workbench::{
     Direction, Evaluation, Hypothesis, State, Verdict, evidence, lambda_for, permutation_e, record,
     threshold, verdicts,
 };

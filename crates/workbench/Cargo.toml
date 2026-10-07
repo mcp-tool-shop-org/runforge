@@ -1,6 +1,6 @@
 [package]
-name = "runforge-core"
-description = "Read a training record and prepare the instrument."
+name = "workbench"
+description = "The sidecar workbench: formulas, knob hypotheses, e-value evidence and a local tool-calling loop."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,7 @@ publish.workspace = true
 authors.workspace = true
 
 [dependencies]
-workbench = { path = "../workbench" }
-serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
-thiserror = "2"
 
 [lints]
 workspace = true
