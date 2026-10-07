@@ -545,6 +545,62 @@ pub fn wording_problem(text: &str, limit: usize) -> Option<String> {
 }
 
 /// A hypothesis's reason: at most 280 characters, no digit, markdown, or verdict.
+/// [`wording_problem`] where the exact names in `names` may appear. A whole token equal to a
+/// host's measure or a learned tool's name, such as `p99`, is a name, not a number the model
+/// wrote. Anything else with a digit is still refused: `99th`, `p99x` and `p 99` all are.
+///
+/// When the host has names with digits, a digit refusal says which tokens are allowed. For a
+/// host without them (RunForge's loss measures), the refusal reads as before.
+pub fn wording_problem_naming(text: &str, limit: usize, names: &[&str]) -> Option<String> {
+    let named: Vec<&str> = names
+        .iter()
+        .copied()
+        .filter(|name| name.chars().any(|ch| ch.is_ascii_digit()))
+        .collect();
+    if named.is_empty() {
+        return wording_problem(text, limit);
+    }
+    // Mask each allowed token with letters of the same length, so the length limit and the
+    // verdict words still read the text as written.
+    let mut masked = String::with_capacity(text.len());
+    let mut token = String::new();
+    let flush = |token: &mut String, masked: &mut String| {
+        if named.contains(&token.as_str()) {
+            masked.extend(std::iter::repeat_n('x', token.chars().count()));
+        } else {
+            masked.push_str(token);
+        }
+        token.clear();
+    };
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            token.push(ch);
+        } else {
+            flush(&mut token, &mut masked);
+            masked.push(ch);
+        }
+    }
+    flush(&mut token, &mut masked);
+    let problem = wording_problem(&masked, limit)?;
+    if masked.chars().any(|ch| ch.is_ascii_digit()) {
+        let shown: Vec<&str> = named.iter().copied().take(3).collect();
+        return Some(format!(
+            "{problem}; name the measure ({}) and write no other digits",
+            shown.join(", ")
+        ));
+    }
+    Some(problem)
+}
+
+/// The names a host's text may use: its measures and the learned tools.
+pub fn allowed_names<'a>(board: &'a Board, library: &'a [LearnedTool]) -> Vec<&'a str> {
+    expr::catalogue(board.host.measures())
+        .into_iter()
+        .map(|measure| measure.name)
+        .chain(library.iter().map(|tool| tool.name.as_str()))
+        .collect()
+}
+
 pub fn reason_allowed(text: &str) -> bool {
     wording_problem(text, 280).is_none()
 }
@@ -1002,7 +1058,7 @@ pub fn propose(
         return Err("The direction is lower or higher.".to_string());
     };
     parse_with_library(board, formula, library)?;
-    if let Some(problem) = wording_problem(why, 280) {
+    if let Some(problem) = wording_problem_naming(why, 280, &allowed_names(board, library)) {
         return Err(format!("The reason was refused: {problem}."));
     }
     let method = board.method.clone();

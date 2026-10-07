@@ -21,11 +21,11 @@ mod testing;
 pub use bench::{
     ALPHA, Arm, Book, CHECKPOINT_EVERY, Checkpoint, Column, Direction, Evaluation, Evidence,
     Experiment, FDR, Hypothesis, Judged, KnobComparison, LearnedTool, Noise, Proposal, State,
-    Verdict, compare_knob, evaluate, evidence, exact_p, experiment_for, lambda_for, learn_tool,
-    note_new_folder, note_use, parse_with_library, permutation_e, propose, read_book,
+    Verdict, allowed_names, compare_knob, evaluate, evidence, exact_p, experiment_for, lambda_for,
+    learn_tool, note_new_folder, note_use, parse_with_library, permutation_e, propose, read_book,
     read_hypotheses, read_tools, reason_allowed, record, seed_noise, seeds_needed,
-    test as test_hypothesis, test_all, threshold, verdicts, wording_problem, write_book,
-    write_hypotheses, write_tools,
+    test as test_hypothesis, test_all, threshold, verdicts, wording_problem,
+    wording_problem_naming, write_book, write_hypotheses, write_tools,
 };
 pub use board::{Board, Host, Run, split_knobs};
 pub use expr::{BUILTINS, Expr, Measure, canonical, catalogue, eval, parse, parse_open, quantile};
