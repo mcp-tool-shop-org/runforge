@@ -1,0 +1,304 @@
+{
+  "authored": [
+    ".cargo/",
+    ".github/",
+    "docs/",
+    "packaging/",
+    "root",
+    "samples/",
+    "site/"
+  ],
+  "breaks": [
+    {
+      "doors": 2,
+      "importedBy": [
+        "runforge"
+      ],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "runforge-core",
+      "partLabel": "runforge-core"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "runforge",
+      "partLabel": "runforge"
+    }
+  ],
+  "changes": {
+    "first": true
+  },
+  "changesTogether": [
+    {
+      "a": "crates/runforge-core/src/bench.rs",
+      "b": "crates/runforge-core/tests/bench.rs",
+      "either": 6,
+      "partLabels": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "crates/runforge-core/src/ledger.rs",
+      "b": "crates/runforge-core/tests/bench.rs",
+      "either": 6,
+      "partLabels": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "relation": "inside",
+      "shared": 4
+    },
+    {
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge-core/src/session.rs",
+      "either": 8,
+      "partLabels": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "relation": "inside",
+      "shared": 5
+    },
+    {
+      "a": "crates/runforge-core/src/bench.rs",
+      "b": "crates/runforge-core/src/ledger.rs",
+      "either": 7,
+      "partLabels": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "relation": "inside",
+      "shared": 4
+    },
+    {
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge/src/instrument.rs",
+      "either": 10,
+      "partLabels": [
+        "runforge-core",
+        "runforge"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge"
+      ],
+      "relation": "b-imports-a",
+      "shared": 5
+    }
+  ],
+  "changesTogetherNote": [
+    "Confidence is low: fewer than 20 source files reach 10 revisions in the window.",
+    "Window: 180 days; a pair counts from 3 shared commits, since 1 source file reaches 10 revisions; the floor rises to 10 when 25 do."
+  ],
+  "changesTogetherWithTests": 0,
+  "commit": "c0c5042883fd40d2bd39c0b6cde793c52bc6f325",
+  "defaultBranch": "main",
+  "derived": "10 parts, mostly Rust (26 files), CSS (2), PowerShell (2), TypeScript (2), Astro (1) and JavaScript (1). Work enters through 3 doors; CI and runforge each reach 2 parts, and CI is followed because a pull request goes through it. It deploys a site to GitHub Pages. runforge is a command built from crates/runforge (nothing ships it).",
+  "doors": [
+    {
+      "checks": [
+        "crates/runforge-core/src/lib.rs"
+      ],
+      "checksCount": 1,
+      "checksMore": 0,
+      "file": ".github/workflows/ci.yml",
+      "id": ".github/workflows/ci.yml",
+      "landings": [],
+      "name": "CI",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "runforge",
+          "depth": 0,
+          "files": 7
+        },
+        {
+          "boundary": "runforge-core",
+          "depth": 0,
+          "files": 19
+        }
+      ],
+      "runs": [
+        "crates/runforge-core/src/expr.rs",
+        "crates/runforge-core/src/parse.rs",
+        "crates/runforge-core/src/report.rs",
+        "crates/runforge-core/src/session.rs",
+        "crates/runforge-core/src/time.rs",
+        "crates/runforge-core/src/weigh.rs",
+        "crates/runforge-core/tests/",
+        "crates/runforge/build.rs",
+        "crates/runforge/src/app.rs",
+        "crates/runforge/src/launch.rs",
+        "crates/runforge/src/main.rs",
+        "crates/runforge/src/sidecar.rs",
+        "crates/runforge/src/store.rs"
+      ],
+      "runsCount": 13,
+      "runsMore": 14,
+      "sends": [
+        "uploads coverage to Codecov"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a pull request",
+        "on a push to main"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": ".github/workflows/pages.yml",
+      "id": ".github/workflows/pages.yml",
+      "landings": [],
+      "name": "Deploy site to GitHub Pages",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "site",
+          "depth": 0,
+          "files": 5
+        }
+      ],
+      "runs": [
+        "site/astro.config.mjs",
+        "site/src/"
+      ],
+      "runsCount": 2,
+      "runsMore": 0,
+      "sends": [
+        "deploys the site"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a push to main touching 2 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "builtFrom": "crates/runforge",
+      "checks": [],
+      "checksCount": 0,
+      "checksMore": 0,
+      "file": "crates/runforge/Cargo.toml",
+      "id": "crates/runforge/Cargo.toml#runforge",
+      "kind": "command",
+      "landings": [],
+      "name": "runforge",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "runforge",
+          "depth": 0,
+          "files": 6
+        },
+        {
+          "boundary": "runforge-core",
+          "depth": 1,
+          "files": 14
+        }
+      ],
+      "runs": [
+        "crates/runforge/src/main.rs"
+      ],
+      "runsCount": 1,
+      "runsMore": 0,
+      "sends": [],
+      "stages": [],
+      "triggers": [],
+      "unshipped": true
+    }
+  ],
+  "duplicates": [],
+  "duplicatesLead": null,
+  "duplicatesNote": [],
+  "edges": [
+    {
+      "from": "runforge",
+      "fromTests": false,
+      "to": "runforge-core"
+    }
+  ],
+  "engine": "1.24.0",
+  "generated": [],
+  "generatedAt": "2026-10-07T01:12:39.639Z",
+  "limits": [
+    "2 writes and 1 read use paths built at run time and are not named here.",
+    "4 writes and 5 reads go to a path their caller passes, not to this repository.",
+    "Statistics confidence is low: fewer than 20 source files reach 10 revisions in the window."
+  ],
+  "mainDoor": ".github/workflows/ci.yml",
+  "partLabels": {
+    ".cargo": ".cargo",
+    ".github": ".github",
+    "docs": "docs",
+    "packaging": "packaging",
+    "root": "the repository root",
+    "runforge": "runforge",
+    "runforge-core": "runforge-core",
+    "samples": "samples",
+    "scripts": "scripts",
+    "site": "the site"
+  },
+  "parts": 10,
+  "readers": [],
+  "repo": "mcp-tool-shop-org/runforge",
+  "sequences": [],
+  "startDoor": "crates/runforge/Cargo.toml#runforge",
+  "startHere": [
+    "crates/runforge/src/main.rs",
+    "crates/runforge-core/src/lib.rs",
+    "crates/runforge-core/src/bench.rs",
+    "crates/runforge-core/src/expr.rs",
+    "crates/runforge-core/src/series.rs",
+    "crates/runforge-core/src/export.rs",
+    "crates/runforge-core/src/history.rs"
+  ],
+  "startReason": "This path follows runforge (a command built from crates/runforge, which nothing ships) from its entry, since CI runs only tests, scripts that import no code here and checks.",
+  "summary": "A Windows instrument for fine-tuning runs: it draws every stored sample from a folder of run records, writes a report, and gives a local model a workbench. A Rust core library with an egui desktop app on top.",
+  "summaryFrom": "person",
+  "testFiles": 16,
+  "testedBy": {
+    "runforge": 5,
+    "runforge-core": 11
+  },
+  "testedInside": [
+    "runforge"
+  ],
+  "unnamedWrites": 2,
+  "unread": [],
+  "unreadCode": [
+    "scripts"
+  ],
+  "unreadCodeUses": "scripts holds only PowerShell files, which this map does not read, so what uses it cannot be seen.",
+  "unreadFiles": 0,
+  "unreadNote": [],
+  "untested": [],
+  "untestedNote": [
+    "runforge is tested only by the unit tests in its own files.",
+    "scripts holds only PowerShell files, which this map does not read, so whether a test touches it cannot be seen."
+  ],
+  "written": 0
+}

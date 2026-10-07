@@ -1,0 +1,794 @@
+{
+  "authorship": {
+    "parts": [],
+    "places": []
+  },
+  "boundaries": [
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": ".cargo",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": ".github",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "docs",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "packaging",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "root",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [
+          "runforge-core"
+        ],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": 0,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "runforge",
+      "qualifyingSourceCommits": 22,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [
+          "runforge"
+        ],
+        "importsOnly": []
+      },
+      "cohesion": 0.729469,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "runforge-core",
+      "qualifyingSourceCommits": 12,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "samples",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "scripts",
+      "qualifyingSourceCommits": 0,
+      "rebaseline": null
+    },
+    {
+      "breakage": {
+        "coChangesOnly": [],
+        "collapsed": false,
+        "confidence": "low",
+        "importsAndCoChanges": [],
+        "importsOnly": []
+      },
+      "cohesion": null,
+      "cohesionDropped": false,
+      "confidence": "low",
+      "highWater": null,
+      "name": "site",
+      "qualifyingSourceCommits": 2,
+      "rebaseline": null
+    }
+  ],
+  "churn": {
+    "definition": "commits is how many commits in the window touch the file, including merges and commits dropped from coupling. lines is added plus deleted in those commits.",
+    "files": [
+      {
+        "commits": 1,
+        "lines": 6,
+        "path": ".cargo/audit.toml"
+      },
+      {
+        "commits": 4,
+        "lines": 87,
+        "path": ".github/workflows/ci.yml"
+      },
+      {
+        "commits": 1,
+        "lines": 50,
+        "path": ".github/workflows/pages.yml"
+      },
+      {
+        "commits": 4,
+        "lines": 9,
+        "path": ".gitignore"
+      },
+      {
+        "commits": 18,
+        "lines": 67,
+        "path": "CHANGELOG.md"
+      },
+      {
+        "commits": 2,
+        "lines": 4523,
+        "path": "Cargo.lock"
+      },
+      {
+        "commits": 1,
+        "lines": 14,
+        "path": "Cargo.toml"
+      },
+      {
+        "commits": 1,
+        "lines": 21,
+        "path": "LICENSE"
+      },
+      {
+        "commits": 2,
+        "lines": 88,
+        "path": "PRIVACY.md"
+      },
+      {
+        "commits": 4,
+        "lines": 274,
+        "path": "README.es.md"
+      },
+      {
+        "commits": 4,
+        "lines": 278,
+        "path": "README.fr.md"
+      },
+      {
+        "commits": 4,
+        "lines": 290,
+        "path": "README.hi.md"
+      },
+      {
+        "commits": 4,
+        "lines": 278,
+        "path": "README.it.md"
+      },
+      {
+        "commits": 4,
+        "lines": 278,
+        "path": "README.ja.md"
+      },
+      {
+        "commits": 9,
+        "lines": 276,
+        "path": "README.md"
+      },
+      {
+        "commits": 4,
+        "lines": 278,
+        "path": "README.pt-BR.md"
+      },
+      {
+        "commits": 4,
+        "lines": 282,
+        "path": "README.zh.md"
+      },
+      {
+        "commits": 1,
+        "lines": 40,
+        "path": "SCORECARD.md"
+      },
+      {
+        "commits": 5,
+        "lines": 58,
+        "path": "SECURITY.md"
+      },
+      {
+        "commits": 2,
+        "lines": 92,
+        "path": "SHIP_GATE.md"
+      },
+      {
+        "commits": 1,
+        "lines": 17,
+        "path": "codecov.yml"
+      },
+      {
+        "commits": 2,
+        "lines": 19,
+        "path": "crates/runforge-core/Cargo.toml"
+      },
+      {
+        "commits": 8,
+        "lines": 3154,
+        "path": "crates/runforge-core/src/bench.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 17,
+        "path": "crates/runforge-core/src/error.rs"
+      },
+      {
+        "commits": 1,
+        "lines": 124,
+        "path": "crates/runforge-core/src/export.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 1914,
+        "path": "crates/runforge-core/src/expr.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 364,
+        "path": "crates/runforge-core/src/history.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 658,
+        "path": "crates/runforge-core/src/ledger.rs"
+      },
+      {
+        "commits": 11,
+        "lines": 137,
+        "path": "crates/runforge-core/src/lib.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 217,
+        "path": "crates/runforge-core/src/parse.rs"
+      },
+      {
+        "commits": 1,
+        "lines": 102,
+        "path": "crates/runforge-core/src/prefs.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 4321,
+        "path": "crates/runforge-core/src/report.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 1141,
+        "path": "crates/runforge-core/src/series.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 1616,
+        "path": "crates/runforge-core/src/session.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 197,
+        "path": "crates/runforge-core/src/time.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 705,
+        "path": "crates/runforge-core/src/weigh.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 1156,
+        "path": "crates/runforge-core/tests/bench.rs"
+      },
+      {
+        "commits": 1,
+        "lines": 303,
+        "path": "crates/runforge-core/tests/edges.rs"
+      },
+      {
+        "commits": 3,
+        "lines": 540,
+        "path": "crates/runforge-core/tests/evidence.rs"
+      },
+      {
+        "commits": 1,
+        "lines": 289,
+        "path": "crates/runforge-core/tests/history.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 639,
+        "path": "crates/runforge-core/tests/series.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 30,
+        "path": "crates/runforge/Cargo.toml"
+      },
+      {
+        "commits": 1,
+        "lines": 22,
+        "path": "crates/runforge/app.manifest"
+      },
+      {
+        "commits": 1,
+        "lines": 15,
+        "path": "crates/runforge/build.rs"
+      },
+      {
+        "commits": 20,
+        "lines": 3506,
+        "path": "crates/runforge/src/app.rs"
+      },
+      {
+        "commits": 11,
+        "lines": 1308,
+        "path": "crates/runforge/src/instrument.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 2444,
+        "path": "crates/runforge/src/launch.rs"
+      },
+      {
+        "commits": 5,
+        "lines": 53,
+        "path": "crates/runforge/src/main.rs"
+      },
+      {
+        "commits": 7,
+        "lines": 1469,
+        "path": "crates/runforge/src/sidecar.rs"
+      },
+      {
+        "commits": 2,
+        "lines": 177,
+        "path": "crates/runforge/src/store.rs"
+      },
+      {
+        "commits": 1,
+        "lines": 56,
+        "path": "deny.toml"
+      },
+      {
+        "commits": 6,
+        "lines": 202,
+        "path": "docs/CONTRACT.md"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "docs/bench-dark.png"
+      },
+      {
+        "commits": 2,
+        "lines": 82,
+        "path": "docs/evidence.consult.md"
+      },
+      {
+        "commits": 2,
+        "lines": 32,
+        "path": "docs/evidence.consult.response.md"
+      },
+      {
+        "commits": 2,
+        "lines": 336,
+        "path": "docs/sidecar-report.consult.md"
+      },
+      {
+        "commits": 4,
+        "lines": 280,
+        "path": "docs/sidecar-workbench.md"
+      },
+      {
+        "commits": 4,
+        "lines": 75,
+        "path": "packaging/msix/AppxManifest.xml"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/SplashScreen.scale-100.png"
+      },
+      {
+        "commits": 3,
+        "lines": 0,
+        "path": "packaging/msix/Assets/SplashScreen.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square150x150Logo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square150x150Logo.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square310x310Logo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square310x310Logo.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square44x44Logo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square44x44Logo.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square71x71Logo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Square71x71Logo.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/StoreLogo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/StoreLogo.scale-200.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Wide310x150Logo.scale-100.png"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "packaging/msix/Assets/Wide310x150Logo.scale-200.png"
+      },
+      {
+        "commits": 4,
+        "lines": 546,
+        "path": "packaging/pack-msix.ps1"
+      },
+      {
+        "commits": 1,
+        "lines": 3,
+        "path": "rust-toolchain.toml"
+      },
+      {
+        "commits": 3,
+        "lines": 26,
+        "path": "samples/README.md"
+      },
+      {
+        "commits": 2,
+        "lines": 3892,
+        "path": "samples/arc-b2/run-config-seed1024.json"
+      },
+      {
+        "commits": 2,
+        "lines": 3892,
+        "path": "samples/arc-b2/run-config-seed13.json"
+      },
+      {
+        "commits": 2,
+        "lines": 3892,
+        "path": "samples/arc-b2/run-config-seed271.json"
+      },
+      {
+        "commits": 2,
+        "lines": 3892,
+        "path": "samples/arc-b2/run-config-seed42.json"
+      },
+      {
+        "commits": 2,
+        "lines": 3892,
+        "path": "samples/arc-b2/run-config-seed512.json"
+      },
+      {
+        "commits": 2,
+        "lines": 5092,
+        "path": "samples/arc-v1/podA/run-config-seed13.json"
+      },
+      {
+        "commits": 2,
+        "lines": 5092,
+        "path": "samples/arc-v1/podA/run-config-seed271.json"
+      },
+      {
+        "commits": 2,
+        "lines": 5092,
+        "path": "samples/arc-v1/podA/run-config-seed42.json"
+      },
+      {
+        "commits": 2,
+        "lines": 5092,
+        "path": "samples/arc-v1/podB/run-config-seed1024.json"
+      },
+      {
+        "commits": 2,
+        "lines": 5092,
+        "path": "samples/arc-v1/podB/run-config-seed512.json"
+      },
+      {
+        "commits": 2,
+        "lines": 0,
+        "path": "samples/runforge-samples.zip"
+      },
+      {
+        "commits": 1,
+        "lines": 36,
+        "path": "scripts/verify.ps1"
+      },
+      {
+        "commits": 3,
+        "lines": 41,
+        "path": "site/astro.config.mjs"
+      },
+      {
+        "commits": 1,
+        "lines": 6112,
+        "path": "site/package-lock.json"
+      },
+      {
+        "commits": 1,
+        "lines": 18,
+        "path": "site/package.json"
+      },
+      {
+        "commits": 1,
+        "lines": 5,
+        "path": "site/public/favicon.svg"
+      },
+      {
+        "commits": 1,
+        "lines": 0,
+        "path": "site/src/assets/logo.png"
+      },
+      {
+        "commits": 1,
+        "lines": 7,
+        "path": "site/src/content.config.ts"
+      },
+      {
+        "commits": 5,
+        "lines": 104,
+        "path": "site/src/content/docs/handbook/architecture.md"
+      },
+      {
+        "commits": 4,
+        "lines": 91,
+        "path": "site/src/content/docs/handbook/getting-started.md"
+      },
+      {
+        "commits": 4,
+        "lines": 94,
+        "path": "site/src/content/docs/handbook/index.md"
+      },
+      {
+        "commits": 6,
+        "lines": 182,
+        "path": "site/src/content/docs/handbook/reference.md"
+      },
+      {
+        "commits": 4,
+        "lines": 52,
+        "path": "site/src/content/docs/handbook/security.md"
+      },
+      {
+        "commits": 7,
+        "lines": 150,
+        "path": "site/src/content/docs/handbook/usage.md"
+      },
+      {
+        "commits": 4,
+        "lines": 256,
+        "path": "site/src/content/docs/handbook/workbench.md"
+      },
+      {
+        "commits": 1,
+        "lines": 35,
+        "path": "site/src/pages/index.astro"
+      },
+      {
+        "commits": 4,
+        "lines": 444,
+        "path": "site/src/site-config.ts"
+      },
+      {
+        "commits": 1,
+        "lines": 8,
+        "path": "site/src/styles/global.css"
+      },
+      {
+        "commits": 1,
+        "lines": 5,
+        "path": "site/src/styles/starlight-custom.css"
+      },
+      {
+        "commits": 1,
+        "lines": 5,
+        "path": "site/tsconfig.json"
+      }
+    ]
+  },
+  "confidence": {
+    "level": "low",
+    "reason": "fewer than 20 source files reach 10 revisions in the window"
+  },
+  "generatedAt": "2026-10-07T01:12:39.639Z",
+  "generatedFrom": {
+    "commit": "c0c5042883fd40d2bd39c0b6cde793c52bc6f325"
+  },
+  "pairs": [
+    {
+      "a": "crates/runforge-core/src/bench.rs",
+      "b": "crates/runforge-core/src/ledger.rs",
+      "either": 7,
+      "shared": 4,
+      "strength": 0.571429
+    },
+    {
+      "a": "crates/runforge-core/src/bench.rs",
+      "b": "crates/runforge-core/tests/bench.rs",
+      "either": 6,
+      "shared": 5,
+      "strength": 0.833333
+    },
+    {
+      "a": "crates/runforge-core/src/ledger.rs",
+      "b": "crates/runforge-core/tests/bench.rs",
+      "either": 6,
+      "shared": 4,
+      "strength": 0.666667
+    },
+    {
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge-core/src/session.rs",
+      "either": 8,
+      "shared": 5,
+      "strength": 0.625
+    },
+    {
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge/src/instrument.rs",
+      "either": 10,
+      "shared": 5,
+      "strength": 0.5
+    },
+    {
+      "a": "crates/runforge-core/src/session.rs",
+      "b": "crates/runforge/src/instrument.rs",
+      "either": 8,
+      "shared": 4,
+      "strength": 0.5
+    }
+  ],
+  "parameters": {
+    "appliedChangesetLimit": 27.5,
+    "changeset": 50,
+    "changesetFraction": 0.25,
+    "cohesionDrop": 0.2,
+    "couplingPopulation": "source",
+    "fallenShared": 3,
+    "floor": "fallen",
+    "floorHeld": false,
+    "floorTrigger": "revision-depth",
+    "headDate": "2026-10-06T11:33:23-07:00",
+    "inScopeFiles": 110,
+    "pinnedStart": null,
+    "priorFloor": null,
+    "qualifyingCommits": 32,
+    "qualifyingMinimum": 30,
+    "revisions": 5,
+    "shared": 10,
+    "sharedFloorUsed": 3,
+    "since": "2026-04-09T18:33:23.000Z",
+    "sourceExtensions": [
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".py",
+      ".rs",
+      ".gd"
+    ],
+    "sourceFileReach": 20,
+    "sourceFileRise": 25,
+    "sourceFilesReachingStrongFloor": 1,
+    "strength": 0.5,
+    "windowDays": 180
+  },
+  "strengthDefinition": "strength is the shared qualifying commits divided by either. either is the number of qualifying commits that touch either file."
+}

@@ -1,0 +1,2167 @@
+{
+  "boundaries": [
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "caf15ca564797a9ca10fa8bce441cbec3116f61db98e0d4123d528c7e04e4395",
+          "path": ".cargo/audit.toml"
+        }
+      ],
+      "globs": [
+        ".cargo/**"
+      ],
+      "importConfidence": "full",
+      "name": ".cargo",
+      "origin": "authored",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "21a79ca7f1799f50723c93b3946b1f04daa4d8b8eeac039a1e085a6cdeb89de5",
+          "path": ".github/workflows/ci.yml"
+        },
+        {
+          "hash": "fe1db5f18ca42c6e2363f0860db9c117b03a6bff39b375189f7c9d2f1882b4a1",
+          "path": ".github/workflows/pages.yml"
+        }
+      ],
+      "globs": [
+        ".github/**"
+      ],
+      "importConfidence": "full",
+      "name": ".github",
+      "origin": "authored",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "409b2d1dbd40d8b7c1d9b3f78e01b8329bd1bac86cec56e868734a929069b37b",
+          "path": "docs/CONTRACT.md"
+        },
+        {
+          "hash": "b4595d0177d57104ab5a0767c3086fc9e329ac3d3c3e25ae532f1dff32e413d6",
+          "path": "docs/bench-dark.png"
+        },
+        {
+          "hash": "3d54722b72ff5d5bf8ed77902dc8adae451d4c65248d5b2a1c9f848ac38ec886",
+          "path": "docs/evidence.consult.md"
+        },
+        {
+          "hash": "0dc9ddbe72c07f66b268970e50dbc70e2ff3630f83d282a0b7b5422689d3678a",
+          "path": "docs/evidence.consult.response.md"
+        },
+        {
+          "hash": "c64895886f554153a7a519179b989ee419fc5637c5aed5e51acc3485f306ec68",
+          "path": "docs/sidecar-report.consult.md"
+        },
+        {
+          "hash": "8631de0cb917b92ab4d5ae8f4660b7733c2337c6e9597d0617afddd66add2230",
+          "path": "docs/sidecar-workbench.md"
+        }
+      ],
+      "globs": [
+        "docs/**"
+      ],
+      "importConfidence": "full",
+      "name": "docs",
+      "origin": "authored",
+      "role": "docs",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "97798c1469733566ed7aae3b27fb3deb26ae02669763723ea4e124422a32be95",
+          "path": "packaging/msix/AppxManifest.xml"
+        },
+        {
+          "hash": "b46ccb11abb7762db3db0441d665a20f0a2e2ec9d83954b80e8915504dee0073",
+          "path": "packaging/msix/Assets/SplashScreen.scale-100.png"
+        },
+        {
+          "hash": "2a89e021b40b8d37338d293b02ff9d9b07006002c51c307dcf3ae0d18425ffa2",
+          "path": "packaging/msix/Assets/SplashScreen.scale-200.png"
+        },
+        {
+          "hash": "ce4af95ce3a528d321a3012028a99f7e2d04f04f075359930b743facbda32722",
+          "path": "packaging/msix/Assets/Square150x150Logo.scale-100.png"
+        },
+        {
+          "hash": "b90a58439c07b5788cb4b2b568c454116ab3af5c3c3039f1895854b9c0924642",
+          "path": "packaging/msix/Assets/Square150x150Logo.scale-200.png"
+        },
+        {
+          "hash": "86e4da2c652b18a0862b320e7dcc1ead715bbdadbd6b73978ee7f6e666a69e70",
+          "path": "packaging/msix/Assets/Square310x310Logo.scale-100.png"
+        },
+        {
+          "hash": "6eebbfa31643306c36bfd95ec0d4de4e9004f47155000cd6a4036dcc405f4b5b",
+          "path": "packaging/msix/Assets/Square310x310Logo.scale-200.png"
+        },
+        {
+          "hash": "6eb5ed1789e58049fa59af773adfd6d517f265fbaead1c02af48ded120f0d09b",
+          "path": "packaging/msix/Assets/Square44x44Logo.scale-100.png"
+        },
+        {
+          "hash": "cd0f6c5cc66c55af742d78c72e4fa7f68a2a636910516dda16d7a5d0289e836e",
+          "path": "packaging/msix/Assets/Square44x44Logo.scale-200.png"
+        },
+        {
+          "hash": "9196c67c7a09126a2c157cfeeceb61a9f6daa7f64129a848196f241e13dc7675",
+          "path": "packaging/msix/Assets/Square71x71Logo.scale-100.png"
+        },
+        {
+          "hash": "ece1cf096424cb88463401e9f2df16dcca3b677ddcf7e7145801a202e2293839",
+          "path": "packaging/msix/Assets/Square71x71Logo.scale-200.png"
+        },
+        {
+          "hash": "c93e97e5636504193712ea38c18861f9add2b14d2d8bb84d522d49ce2a6f91e4",
+          "path": "packaging/msix/Assets/StoreLogo.scale-100.png"
+        },
+        {
+          "hash": "5832e79ce2e41bcec8a2d896f1f116b669318a1ede1ebe120e534cc25836381f",
+          "path": "packaging/msix/Assets/StoreLogo.scale-200.png"
+        },
+        {
+          "hash": "f7debefc43bc1b51312fae03a07cb4fe7be89d8c113b01e05e160df165f2df52",
+          "path": "packaging/msix/Assets/Wide310x150Logo.scale-100.png"
+        },
+        {
+          "hash": "76ffc9f2b5840fcf3306259393f33af23d8d8ec0eb97b9370ddc2bf5b3983e5b",
+          "path": "packaging/msix/Assets/Wide310x150Logo.scale-200.png"
+        },
+        {
+          "hash": "844f1988c51288ac33a987b530eb979092c75c1ae416d76a2cd1ed6bea0b9d3e",
+          "path": "packaging/pack-msix.ps1"
+        }
+      ],
+      "globs": [
+        "packaging/**"
+      ],
+      "importConfidence": "full",
+      "name": "packaging",
+      "origin": "authored",
+      "role": "data",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "d3895f006fdd002ef1952b2da3c957f4672f283e918c755b2d7575dd50d3eafc",
+          "path": ".gitignore"
+        },
+        {
+          "hash": "a7086fa011bf3254774c129d6cc5c20c08742649a9691d7678a9ad7ee5c77614",
+          "path": "CHANGELOG.md"
+        },
+        {
+          "hash": "5bcff8d8f26d68b52dc29724ce7c2410e757c9aa080624a6623808ddb455fbea",
+          "path": "Cargo.lock"
+        },
+        {
+          "hash": "0544ba24f7cfba3f5cc5c3630414c84be5da73d8773f1dcdc52506b46f26859f",
+          "path": "Cargo.toml"
+        },
+        {
+          "hash": "367e5141e4f5884e5791c4021f33a9faa958840a5decf44e1b273a87aad1c459",
+          "path": "LICENSE"
+        },
+        {
+          "hash": "828872fb069f20f885e9470ca4d8d263a58c8cdd64f1b0a1474edcdeccfd7098",
+          "path": "PRIVACY.md"
+        },
+        {
+          "hash": "cfde69c6160c5d45056ed5ad5bc61fda2264f0373e7abc5ff8660985e3b2c1e0",
+          "path": "README.es.md"
+        },
+        {
+          "hash": "6daa84e33fb30c2de049a0734ebe7e169f79aff26dcd2ffdc0ac1a6effc34343",
+          "path": "README.fr.md"
+        },
+        {
+          "hash": "7622d49ab389e172601fc870d38c50e548d4e8d2f40ed5754519d1afcd42b5db",
+          "path": "README.hi.md"
+        },
+        {
+          "hash": "e2c38492433f9c5aecee96ec9f1b2fa5341aeba6a501f8b928c4ffdce9f5f5d4",
+          "path": "README.it.md"
+        },
+        {
+          "hash": "b53dc7eec327305782b67948e9aa554833daa59d9d5019d8fb9b911119908d11",
+          "path": "README.ja.md"
+        },
+        {
+          "hash": "39882f789481a8beca23cab400277d60f4827fb905ad608f35c9ab9515514add",
+          "path": "README.md"
+        },
+        {
+          "hash": "948d68a1b90b0902e2a27f8042101d3cd2bb63828347af8d9d91e9e552f9def3",
+          "path": "README.pt-BR.md"
+        },
+        {
+          "hash": "4b4f75f1f435e32416b1543342f1feeaa1c7594aa08297c9c8ae2fec4d9f6f84",
+          "path": "README.zh.md"
+        },
+        {
+          "hash": "c154510b81e7cee7065bbc9659da895bc8f3bb3950cc4edeefe6f91af8bf6b0c",
+          "path": "SCORECARD.md"
+        },
+        {
+          "hash": "f35bfd0acb899e3b73ffd44bcbd4f5639b2dc68c9bed67505a161d7b9936c453",
+          "path": "SECURITY.md"
+        },
+        {
+          "hash": "cbfb0f81fd13558828ebf0bc3690a67a4d3503cdb832cf9ea57270e085d860d2",
+          "path": "SHIP_GATE.md"
+        },
+        {
+          "hash": "1495f43a4671cc80c9a5883af6d42d82dd8131516a7be407c36ef7f571c15013",
+          "path": "codecov.yml"
+        },
+        {
+          "hash": "dff208744e63bc578214e45cf4523b07ef0e8d90d70fafd95edaddbc6be51fbd",
+          "path": "deny.toml"
+        },
+        {
+          "hash": "a7a23801522d469e93021507fc88e9f5651056fce0e6aa22b3d3157c5f3dc6fe",
+          "path": "rust-toolchain.toml"
+        }
+      ],
+      "globs": [
+        "*"
+      ],
+      "importConfidence": "full",
+      "name": "root",
+      "origin": "authored",
+      "role": "config",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 2,
+      "entryPoints": [
+        "crates/runforge/src/main.rs"
+      ],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "0c394699e5c249780c22ccf7edc188480d288c0ed9f7a79cfa6c5e236603b421",
+          "path": "crates/runforge/Cargo.toml"
+        },
+        {
+          "hash": "ca87e39a76df83b00665704184be747e0c8fd0da428304145f33c876699c3de6",
+          "path": "crates/runforge/app.manifest"
+        },
+        {
+          "buildScript": true,
+          "hash": "bcae8bcd040daf257d4cc98f30fdc983a97fad9656b2a96fb6abcdac40606bd8",
+          "path": "crates/runforge/build.rs"
+        },
+        {
+          "exports": [
+            "home_relative"
+          ],
+          "failurePaths": [
+            {
+              "in": "load_folder",
+              "kind": "match-err",
+              "line": 186
+            },
+            {
+              "in": "load_folder",
+              "kind": "match-err",
+              "line": 190
+            },
+            {
+              "in": "load_folder",
+              "kind": "match-err",
+              "line": 191
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 220
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 238
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 244
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 259
+            },
+            {
+              "in": "load_series",
+              "kind": "match-err",
+              "line": 263
+            },
+            {
+              "in": "instrument",
+              "kind": "match-err",
+              "line": 315
+            },
+            {
+              "in": "poll_sidecar",
+              "kind": "match-err",
+              "line": 359
+            },
+            {
+              "in": "poll_sidecar",
+              "kind": "match-err",
+              "line": 360
+            },
+            {
+              "in": "keep_session",
+              "kind": "match-err",
+              "line": 387
+            },
+            {
+              "in": "retest_hypotheses",
+              "kind": "match-err",
+              "line": 426
+            },
+            {
+              "in": "set_theme",
+              "kind": "match-err",
+              "line": 441
+            },
+            {
+              "in": "save_text",
+              "kind": "match-err",
+              "line": 452
+            },
+            {
+              "in": "begin",
+              "kind": "err",
+              "line": 745
+            },
+            {
+              "in": "begin",
+              "kind": "err",
+              "line": 749
+            },
+            {
+              "in": "begin",
+              "kind": "err",
+              "line": 753
+            },
+            {
+              "in": "on_train",
+              "kind": "match-err",
+              "line": 803
+            },
+            {
+              "in": "on_train",
+              "kind": "match-err",
+              "line": 817
+            },
+            {
+              "in": "on_eval",
+              "kind": "match-err",
+              "line": 824
+            },
+            {
+              "in": "on_eval",
+              "kind": "match-err",
+              "line": 838
+            },
+            {
+              "in": "on_export",
+              "kind": "match-err",
+              "line": 845
+            },
+            {
+              "in": "on_export",
+              "kind": "match-err",
+              "line": 863
+            },
+            {
+              "in": "launch",
+              "kind": "match-err",
+              "line": 883
+            }
+          ],
+          "hash": "78b181505d36ee03adca2f9d834d5f62e2412aadcb3cab46b772dfbeb7768199",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs",
+            "crates/runforge/src/instrument.rs",
+            "crates/runforge/src/launch.rs",
+            "crates/runforge/src/sidecar.rs"
+          ],
+          "path": "crates/runforge/src/app.rs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "line": 944,
+                  "name": "finite_points",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                },
+                {
+                  "line": 965,
+                  "name": "curve_segments",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  },
+                  "via": "draw_series"
+                },
+                {
+                  "line": 973,
+                  "name": "finite_points",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  },
+                  "via": "draw_series"
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "draw_chart"
+            },
+            {
+              "calls": [
+                {
+                  "line": 965,
+                  "name": "curve_segments",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                },
+                {
+                  "line": 973,
+                  "name": "finite_points",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "draw_series"
+            },
+            {
+              "calls": [
+                {
+                  "line": 992,
+                  "name": "format_f64",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "draw_entry"
+            },
+            {
+              "calls": [
+                {
+                  "line": 1015,
+                  "name": "format_f64",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "draw_eval"
+            }
+          ],
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "draw_instrument",
+            "report_date",
+            "tool_line"
+          ],
+          "hash": "7635072080b63143d6394136ca2fe13fa38828de5949f580650af31bcd9e8daa",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs",
+            "crates/runforge-core/src/weigh.rs"
+          ],
+          "path": "crates/runforge/src/instrument.rs"
+        },
+        {
+          "exports": [
+            "apply_log_update",
+            "bust_tool_cache",
+            "eval_args",
+            "exit_note",
+            "expire_tool_cache_for_test",
+            "export_args",
+            "find_backprop",
+            "remember_line",
+            "spawn_session",
+            "start_installed",
+            "tool_answer",
+            "train_args"
+          ],
+          "failurePaths": [
+            {
+              "in": "train_args",
+              "kind": "err",
+              "line": 65
+            },
+            {
+              "in": "train_args",
+              "kind": "err",
+              "line": 77
+            },
+            {
+              "in": "eval_args",
+              "kind": "err",
+              "line": 89
+            },
+            {
+              "in": "export_args",
+              "kind": "err",
+              "line": 102
+            },
+            {
+              "in": "output_text",
+              "kind": "err",
+              "line": 115
+            },
+            {
+              "in": "required_text",
+              "kind": "err",
+              "line": 122
+            },
+            {
+              "in": "plain_text",
+              "kind": "err",
+              "line": 129
+            },
+            {
+              "in": "next",
+              "kind": "match-err",
+              "line": 438
+            },
+            {
+              "in": "poll_exit",
+              "kind": "match-err",
+              "line": 733
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1068
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1073
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1078
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1082
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1097
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1131
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1139
+            },
+            {
+              "in": "spawn_console_session",
+              "kind": "err",
+              "line": 1145
+            }
+          ],
+          "hash": "7d5c5a281724607ad8bbf3b4e3f03414632ef79135da2dc6d5e6802babbfac9b",
+          "path": "crates/runforge/src/launch.rs",
+          "testsInside": true
+        },
+        {
+          "entry": "main",
+          "entryRule": 1,
+          "hash": "8d6c84de7fdd5fb9f19dfb5d877fd609fab10bea4ee64d9a6964dd79745d2057",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs",
+            "crates/runforge/src/app.rs",
+            "crates/runforge/src/instrument.rs",
+            "crates/runforge/src/launch.rs",
+            "crates/runforge/src/sidecar.rs",
+            "crates/runforge/src/store.rs"
+          ],
+          "path": "crates/runforge/src/main.rs",
+          "sequences": [
+            {
+              "calls": [
+                {
+                  "line": 41,
+                  "name": "packaged_local_state",
+                  "target": {
+                    "file": "crates/runforge/src/store.rs"
+                  },
+                  "via": "prefs_dir"
+                },
+                {
+                  "line": 41,
+                  "name": "choose_prefs_dir",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  },
+                  "via": "prefs_dir"
+                },
+                {
+                  "line": 31,
+                  "name": "open",
+                  "target": {
+                    "file": "crates/runforge/src/app.rs"
+                  }
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": true,
+              "isDefaultExport": false,
+              "name": "main"
+            },
+            {
+              "calls": [
+                {
+                  "line": 41,
+                  "name": "packaged_local_state",
+                  "target": {
+                    "file": "crates/runforge/src/store.rs"
+                  }
+                },
+                {
+                  "line": 41,
+                  "name": "choose_prefs_dir",
+                  "target": {
+                    "file": "crates/runforge-core/src/lib.rs"
+                  }
+                }
+              ],
+              "exported": false,
+              "invokedAtTopLevel": false,
+              "isDefaultExport": false,
+              "name": "prefs_dir"
+            }
+          ],
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "can_call_tools",
+            "candidates",
+            "chat_message",
+            "local_model_names",
+            "start_bench",
+            "start_bench_on",
+            "tool_calls"
+          ],
+          "failurePaths": [
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 45
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 74
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 84
+            },
+            {
+              "in": "run_bench",
+              "kind": "match-err",
+              "line": 91
+            },
+            {
+              "in": "chat_message",
+              "kind": "err",
+              "line": 201
+            },
+            {
+              "in": "http",
+              "kind": "err",
+              "line": 246
+            },
+            {
+              "in": "http",
+              "kind": "err",
+              "line": 248
+            },
+            {
+              "in": "exchange",
+              "kind": "match-err",
+              "line": 286
+            },
+            {
+              "in": "exchange",
+              "kind": "match-err",
+              "line": 287
+            },
+            {
+              "in": "exchange",
+              "kind": "err",
+              "line": 287
+            },
+            {
+              "in": "decode_chunks",
+              "kind": "err",
+              "line": 350
+            }
+          ],
+          "hash": "174224a476f64d4a894474433846d526a77873f63d01c39e475b1f9035f653fd",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "path": "crates/runforge/src/sidecar.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "local_state_dir",
+            "packaged_local_state"
+          ],
+          "hash": "f198927924b215e89664d5b565b35a276156220524c4b8d0476d8dbfa0ae6b08",
+          "path": "crates/runforge/src/store.rs",
+          "testsInside": true
+        }
+      ],
+      "globs": [
+        "crates/runforge/**"
+      ],
+      "importConfidence": "full",
+      "name": "runforge",
+      "origin": "authored",
+      "role": "code",
+      "testRunners": [
+        "cargo test"
+      ],
+      "testedBy": 5,
+      "testedInside": true,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 1,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [
+        "crates/runforge-core/src/lib.rs"
+      ],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "3d5d9adcf1e31ec826d6185850cd3f856d8b4cd3dfc77f3636d99fdaf8e17739",
+          "path": "crates/runforge-core/Cargo.toml"
+        },
+        {
+          "exports": [
+            "board_method",
+            "compare_knob",
+            "evaluate",
+            "evidence",
+            "exact_p",
+            "experiment_for",
+            "lambda_for",
+            "learn_tool",
+            "note_new_folder",
+            "note_use",
+            "parse_with_library",
+            "permutation_e",
+            "propose",
+            "read_book",
+            "read_hypotheses",
+            "read_tools",
+            "reason_allowed",
+            "record",
+            "run_fingerprint",
+            "seed_noise",
+            "seeds_needed",
+            "test",
+            "test_all",
+            "threshold",
+            "verdicts",
+            "wording_problem",
+            "write_book",
+            "write_hypotheses",
+            "write_tools"
+          ],
+          "failurePaths": [
+            {
+              "in": "lines",
+              "kind": "match-err",
+              "line": 100
+            },
+            {
+              "in": "compare_knob",
+              "kind": "err",
+              "line": 251
+            },
+            {
+              "in": "compare_knob",
+              "kind": "err",
+              "line": 277
+            },
+            {
+              "in": "test",
+              "kind": "match-err",
+              "line": 571
+            },
+            {
+              "in": "test",
+              "kind": "match-err",
+              "line": 575
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 836
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 844
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 852
+            },
+            {
+              "in": "learn_tool",
+              "kind": "match-err",
+              "line": 857
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 858
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 865
+            },
+            {
+              "in": "learn_tool",
+              "kind": "err",
+              "line": 870
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 993
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 999
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 1003
+            },
+            {
+              "in": "propose",
+              "kind": "err",
+              "line": 1010
+            }
+          ],
+          "hash": "b84019524e6f042544d0bf0fa0cf8badbb097162ac4d4f4daf2e6da4ceedee12",
+          "importsFiles": [
+            "crates/runforge-core/src/expr.rs",
+            "crates/runforge-core/src/ledger.rs",
+            "crates/runforge-core/src/series.rs"
+          ],
+          "path": "crates/runforge-core/src/bench.rs"
+        },
+        {
+          "hash": "5b1c615379d3e67c59de8e50351c795fe999c2c1e2ae0f6e9200f24f9900f8ab",
+          "path": "crates/runforge-core/src/error.rs"
+        },
+        {
+          "exports": [
+            "curve_csv",
+            "curve_segments",
+            "entry_json",
+            "finite_points",
+            "format_f64",
+            "json_equal",
+            "list_csv"
+          ],
+          "hash": "4350ba6b261541314b3187de6457da0037de562f786333d8615d23223074518d",
+          "importsFiles": [
+            "crates/runforge-core/src/history.rs"
+          ],
+          "path": "crates/runforge-core/src/export.rs"
+        },
+        {
+          "exports": [
+            "canonical",
+            "eval",
+            "parse",
+            "parse_open",
+            "quantile"
+          ],
+          "failurePaths": [
+            {
+              "in": "parse_open",
+              "kind": "err",
+              "line": 177
+            },
+            {
+              "in": "parse_raw",
+              "kind": "err",
+              "line": 185
+            },
+            {
+              "in": "parse_raw",
+              "kind": "err",
+              "line": 195
+            },
+            {
+              "in": "expand",
+              "kind": "err",
+              "line": 208
+            },
+            {
+              "in": "expand",
+              "kind": "err",
+              "line": 211
+            },
+            {
+              "in": "eval",
+              "kind": "err",
+              "line": 264
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 326
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 331
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 339
+            },
+            {
+              "in": "tokenize",
+              "kind": "err",
+              "line": 343
+            },
+            {
+              "in": "part",
+              "kind": "err",
+              "line": 372
+            },
+            {
+              "in": "deep",
+              "kind": "err",
+              "line": 380
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 462
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 472
+            },
+            {
+              "in": "atom",
+              "kind": "err",
+              "line": 476
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 496
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 499
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 500
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 504
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 507
+            },
+            {
+              "in": "check_names",
+              "kind": "err",
+              "line": 513
+            },
+            {
+              "in": "eval",
+              "kind": "err",
+              "line": 593
+            },
+            {
+              "in": "measure",
+              "kind": "err",
+              "line": 644
+            },
+            {
+              "in": "call",
+              "kind": "err",
+              "line": 651
+            },
+            {
+              "in": "windowed",
+              "kind": "err",
+              "line": 693
+            },
+            {
+              "in": "windowed",
+              "kind": "err",
+              "line": 701
+            },
+            {
+              "in": "windowed",
+              "kind": "err",
+              "line": 722
+            }
+          ],
+          "hash": "ad7059029fece13d1950e2e796f97e79691817a34e9f2793072c0f3f4d5e9c64",
+          "importsFiles": [
+            "crates/runforge-core/src/series.rs"
+          ],
+          "path": "crates/runforge-core/src/expr.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "history_file",
+            "hyperparameter_diffs",
+            "load_bytes",
+            "load_folder",
+            "load_text",
+            "pick_best_loss"
+          ],
+          "failurePaths": [
+            {
+              "in": "history_file",
+              "kind": "err",
+              "line": 166
+            },
+            {
+              "in": "load_bytes",
+              "kind": "err",
+              "line": 183
+            }
+          ],
+          "hash": "e7489369cd4d834b98f47701afab8ea7e130ac1d8f2f7c85f5b649218328e00d",
+          "importsFiles": [
+            "crates/runforge-core/src/error.rs",
+            "crates/runforge-core/src/export.rs",
+            "crates/runforge-core/src/parse.rs",
+            "crates/runforge-core/src/time.rs"
+          ],
+          "path": "crates/runforge-core/src/history.rs"
+        },
+        {
+          "exports": [
+            "board_key",
+            "known_runs",
+            "ledger_for",
+            "record_weighing",
+            "weighed_now"
+          ],
+          "hash": "907dae1af73c76e58cc99ad8ad57213e53de9d3ad72699d4fa763f8dec214a24",
+          "importsFiles": [
+            "crates/runforge-core/src/series.rs",
+            "crates/runforge-core/src/weigh.rs"
+          ],
+          "path": "crates/runforge-core/src/ledger.rs"
+        },
+        {
+          "hash": "f0bca9d04d8053e0b549385f7e425c618945b53c9d281978b0cf6718fd272ecc",
+          "importsFiles": [
+            "crates/runforge-core/src/bench.rs",
+            "crates/runforge-core/src/error.rs",
+            "crates/runforge-core/src/export.rs",
+            "crates/runforge-core/src/expr.rs",
+            "crates/runforge-core/src/history.rs",
+            "crates/runforge-core/src/ledger.rs",
+            "crates/runforge-core/src/parse.rs",
+            "crates/runforge-core/src/prefs.rs",
+            "crates/runforge-core/src/report.rs",
+            "crates/runforge-core/src/series.rs",
+            "crates/runforge-core/src/session.rs",
+            "crates/runforge-core/src/time.rs",
+            "crates/runforge-core/src/weigh.rs"
+          ],
+          "path": "crates/runforge-core/src/lib.rs"
+        },
+        {
+          "exports": [
+            "parse_document"
+          ],
+          "failurePaths": [
+            {
+              "in": "visit_map",
+              "kind": "err",
+              "line": 121
+            }
+          ],
+          "hash": "4f430a40e12f358503f7543a9740e51c447079ba584638bab20c296b4504612a",
+          "importsFiles": [
+            "crates/runforge-core/src/error.rs"
+          ],
+          "path": "crates/runforge-core/src/parse.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "choose_prefs_dir",
+            "read_prefs",
+            "write_prefs"
+          ],
+          "hash": "99d960ba09d1710b4efd49139ed551cc0f8556795182f62732847b41b0de1947",
+          "path": "crates/runforge-core/src/prefs.rs"
+        },
+        {
+          "exports": [
+            "comparison_report",
+            "comparison_report_full",
+            "comparison_report_with",
+            "is_heading",
+            "orientation_allowed",
+            "orientation_omission",
+            "report_file_name",
+            "utc_date"
+          ],
+          "hash": "8fe1e77faa190ea51e32ae5b711d4351ebb4e4581055ec12cf87930c9f7d903b",
+          "importsFiles": [
+            "crates/runforge-core/src/bench.rs",
+            "crates/runforge-core/src/ledger.rs",
+            "crates/runforge-core/src/series.rs",
+            "crates/runforge-core/src/weigh.rs"
+          ],
+          "path": "crates/runforge-core/src/report.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "band_segments",
+            "earlier_readings",
+            "epoch_floor",
+            "fingerprint",
+            "format_measure",
+            "load_series_folder",
+            "loss_segments",
+            "low_band",
+            "normalize_recipe",
+            "read_board",
+            "read_memory",
+            "recall",
+            "recipe_keys",
+            "recipe_label",
+            "recipe_marks",
+            "recipe_text",
+            "remember",
+            "sidecar_prompt",
+            "spikes_above",
+            "write_memory"
+          ],
+          "failurePaths": [
+            {
+              "in": "load_series_folder",
+              "kind": "match-err",
+              "line": 146
+            },
+            {
+              "in": "load_series_folder",
+              "kind": "err",
+              "line": 150
+            }
+          ],
+          "hash": "37d70ff929b4c6b0f726e0e46440c61d2adbc0e9597ba7d2323d912d61858792",
+          "importsFiles": [
+            "crates/runforge-core/src/error.rs",
+            "crates/runforge-core/src/export.rs",
+            "crates/runforge-core/src/parse.rs"
+          ],
+          "path": "crates/runforge-core/src/series.rs"
+        },
+        {
+          "exports": [
+            "direction_of"
+          ],
+          "failurePaths": [
+            {
+              "in": "measure",
+              "kind": "match-err",
+              "line": 457
+            },
+            {
+              "in": "compare",
+              "kind": "match-err",
+              "line": 465
+            },
+            {
+              "in": "compare",
+              "kind": "match-err",
+              "line": 512
+            },
+            {
+              "in": "learn",
+              "kind": "match-err",
+              "line": 532
+            },
+            {
+              "in": "hypothesize",
+              "kind": "match-err",
+              "line": 558
+            }
+          ],
+          "hash": "6749fdec6f79aa856afd1c02b54c2f58df8984bb96b7a7a7ca70fc8e0b26d0ca",
+          "importsFiles": [
+            "crates/runforge-core/src/bench.rs",
+            "crates/runforge-core/src/expr.rs",
+            "crates/runforge-core/src/series.rs"
+          ],
+          "path": "crates/runforge-core/src/session.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "timestamp_ord"
+          ],
+          "hash": "516121f7b584aec1fda6e57d509c42e75e1376d4a8895f59ca43ea16ce28bf17",
+          "path": "crates/runforge-core/src/time.rs",
+          "testsInside": true
+        },
+        {
+          "exports": [
+            "spread",
+            "weigh"
+          ],
+          "hash": "beccb5263a67fb1c66e0231b9968ac266049ef3e7bf8e61c096781061ab4369c",
+          "importsFiles": [
+            "crates/runforge-core/src/series.rs"
+          ],
+          "path": "crates/runforge-core/src/weigh.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "06bf6466c132b0a5401414af1b84362a967baeb7b9e94fba18dbe7d247167a04",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "library": "crates/runforge-core/src/lib.rs",
+          "path": "crates/runforge-core/tests/bench.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "c0c5719a6e0c9ddf8adb2524f48baa68a411b6d8d653abbf14f8e3ab04893fa9",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "library": "crates/runforge-core/src/lib.rs",
+          "path": "crates/runforge-core/tests/edges.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "62e45189d0aee44b6dcec557ae853137196050f420bd2da4f7d8f33fca154cad",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "library": "crates/runforge-core/src/lib.rs",
+          "path": "crates/runforge-core/tests/evidence.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "f849e8d1191403dc88ad6605bfc9684871fd290eae1ec836c78a5584727170ce",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "library": "crates/runforge-core/src/lib.rs",
+          "path": "crates/runforge-core/tests/history.rs",
+          "testsInside": true
+        },
+        {
+          "hash": "588479ac83a6e2e11a2af96f343817d2117abf41b49642871cd4f68b3f5c9c4b",
+          "importsFiles": [
+            "crates/runforge-core/src/lib.rs"
+          ],
+          "library": "crates/runforge-core/src/lib.rs",
+          "path": "crates/runforge-core/tests/series.rs",
+          "testsInside": true
+        }
+      ],
+      "globs": [
+        "crates/runforge-core/**"
+      ],
+      "importConfidence": "full",
+      "name": "runforge-core",
+      "origin": "authored",
+      "outsidePlaces": [
+        {
+          "reads": 5,
+          "where": [
+            "caller"
+          ],
+          "writes": 4
+        }
+      ],
+      "outsideReads": 5,
+      "outsideWrites": 4,
+      "role": "code",
+      "testRunners": [
+        "cargo test"
+      ],
+      "testedBy": 11,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "6199cd0bccd96152fdfb3d14d47c7e92c19287fc35d07ef6ecd4af54c871d0c8",
+          "path": "samples/README.md"
+        },
+        {
+          "hash": "fdef3329a4170bf1c55b67081c26773996f3f62905cfaa1a2095811e5c564c2d",
+          "path": "samples/arc-b2/run-config-seed1024.json"
+        },
+        {
+          "hash": "92acae52a769f67ecb4f51173707c9dcb026859b627964c03a4ba035907b753c",
+          "path": "samples/arc-b2/run-config-seed13.json"
+        },
+        {
+          "hash": "eac40c0c00794d21a76da7c23b398daa4573b78926c3c30acc24737f1ff96bf1",
+          "path": "samples/arc-b2/run-config-seed271.json"
+        },
+        {
+          "hash": "76fd4d8a72d712367f077992cf99818760c548eefc0426c8fad2ec3b646ba8d7",
+          "path": "samples/arc-b2/run-config-seed42.json"
+        },
+        {
+          "hash": "57784e04a653dc2b82d8e812be83fa5466c128bb49f19097f64fff1d6224895e",
+          "path": "samples/arc-b2/run-config-seed512.json"
+        },
+        {
+          "hash": "973da42124d2ca8715a1efd50cc5bbaa8e05a2d6bef91103f5052d32bb3300d1",
+          "path": "samples/arc-v1/podA/run-config-seed13.json"
+        },
+        {
+          "hash": "4f6e0d3fb2860de40afcdab70c2de7d6eb582f28af506c59f621e23892858bf9",
+          "path": "samples/arc-v1/podA/run-config-seed271.json"
+        },
+        {
+          "hash": "5ce394bf46d11db203b7cd02c464117864d858ce0bbde24b880b6a83121d72b8",
+          "path": "samples/arc-v1/podA/run-config-seed42.json"
+        },
+        {
+          "hash": "1914c21732682cb632daede8535651e390079dc6230fe64e35d93eb1e2bafad4",
+          "path": "samples/arc-v1/podB/run-config-seed1024.json"
+        },
+        {
+          "hash": "0cc0436f640013ce6b4a5130ada5410231062ec2f14005c3a7fea563ee8d5eca",
+          "path": "samples/arc-v1/podB/run-config-seed512.json"
+        },
+        {
+          "hash": "fcb0436f0966dffceefbc363d90bc2022d6d2a509de2bb8f383d442523a0a2e0",
+          "path": "samples/runforge-samples.zip"
+        }
+      ],
+      "globs": [
+        "samples/**"
+      ],
+      "importConfidence": "full",
+      "name": "samples",
+      "origin": "authored",
+      "role": "data",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "02c0a2f815ae7a99bd8cbdcd4ce9bbf47d8132d4bd2887a12eb26022d58d8cdc",
+          "path": "scripts/verify.ps1"
+        }
+      ],
+      "globs": [
+        "scripts/**"
+      ],
+      "importConfidence": "full",
+      "name": "scripts",
+      "origin": "authored",
+      "role": "code",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    },
+    {
+      "dynamicReads": 0,
+      "dynamicSpawns": 0,
+      "dynamicSpawnsInTests": 0,
+      "dynamicWrites": 0,
+      "entryPoints": [],
+      "externals": 0,
+      "files": [
+        {
+          "hash": "8baa48d04cf3df3bf9e8812df5f60d792ef7a5ce912bc36bc7be99c230bee91a",
+          "path": "site/astro.config.mjs"
+        },
+        {
+          "hash": "791833e5299efff846e792df71a28eea854648842d335dde8af17fe960eb54aa",
+          "path": "site/package-lock.json"
+        },
+        {
+          "hash": "9c39e620ebae2c5718ecd8c6188bd3451409a614ec8f5308dc15d5fd886e5b91",
+          "path": "site/package.json"
+        },
+        {
+          "hash": "db3c76ae1d22efa9f6c9a1cf3d8b1f45a5e94210d34e4b518006018e7d3d097d",
+          "path": "site/public/favicon.svg"
+        },
+        {
+          "hash": "afee21bb1fa990da31c8807e9a2433667c3472fa63b45d9f0a6e59b2241f14bf",
+          "path": "site/src/assets/logo.png"
+        },
+        {
+          "constantOnly": true,
+          "hash": "ee756dfba4122d2acc94a39b2555d9f200fff56a87a8c0b10f9cd01df26a8b62",
+          "path": "site/src/content.config.ts"
+        },
+        {
+          "hash": "287d6d5b2bbcf5812e22c9e34d0eb30f41566dada08043b91ed3d68aad942412",
+          "path": "site/src/content/docs/handbook/architecture.md"
+        },
+        {
+          "hash": "67cae22da54c8e71c91d8de8d735383a1e82596f1464a13bb86cf6bf4f359417",
+          "path": "site/src/content/docs/handbook/getting-started.md"
+        },
+        {
+          "hash": "d9686e9f4dfd3f24a5353524ed4aec9a2c0500a05f076432b66a97eb9eca4e11",
+          "path": "site/src/content/docs/handbook/index.md"
+        },
+        {
+          "hash": "5c6d6eb28917c8cc6d0010a95986296857bac48608da0584bd0d302677d0eafa",
+          "path": "site/src/content/docs/handbook/reference.md"
+        },
+        {
+          "hash": "9557f55844a4f295774aa54dff17aa51620c3757164f6354b98eac92d8cbfd14",
+          "path": "site/src/content/docs/handbook/security.md"
+        },
+        {
+          "hash": "427dcc75b7eb09af78adf3b682c038c193dcd5ed6793ece3b8d614f2aac17f8f",
+          "path": "site/src/content/docs/handbook/usage.md"
+        },
+        {
+          "hash": "bf929519e8a1f4159bb49250f0ff69351fa032b19dcc16cd5a3357734c4a943a",
+          "path": "site/src/content/docs/handbook/workbench.md"
+        },
+        {
+          "hash": "4fb84a646c4d833c33f4058e1ed1775849e855c65e5adb7e45d2a633674bd603",
+          "importOrder": [
+            "site/src/styles/global.css",
+            "site/src/site-config.ts"
+          ],
+          "importsFiles": [
+            "site/src/site-config.ts",
+            "site/src/styles/global.css"
+          ],
+          "path": "site/src/pages/index.astro"
+        },
+        {
+          "constantOnly": true,
+          "hash": "ee61f8d92181b37ac0b353b4d76e1c74d6721a86dc0ba1ea0fd8410e6934ff99",
+          "path": "site/src/site-config.ts"
+        },
+        {
+          "hash": "11c88abe909fd824ede50a044fd29ea0ce42db1b174c5f9175aac7514a046188",
+          "path": "site/src/styles/global.css"
+        },
+        {
+          "hash": "b17173f07c0db8b532533b5de48035355a12d9582f0918d75b12214b07d53a17",
+          "path": "site/src/styles/starlight-custom.css"
+        },
+        {
+          "hash": "b5b0a5b04a14cddd7713c5e1c82e86c79c17c2f86b170e26e9b170b3d5e01cd9",
+          "path": "site/tsconfig.json"
+        }
+      ],
+      "globs": [
+        "site/**"
+      ],
+      "importConfidence": "full",
+      "name": "site",
+      "origin": "authored",
+      "role": "site",
+      "testedBy": 0,
+      "unresolvedSites": 0
+    }
+  ],
+  "doors": [
+    {
+      "checksCount": 1,
+      "commands": [
+        {
+          "dir": "",
+          "job": "test",
+          "programs": [
+            "cargo"
+          ],
+          "step": "Format"
+        },
+        {
+          "dir": "",
+          "job": "test",
+          "programs": [
+            "cargo"
+          ],
+          "step": "Clippy"
+        },
+        {
+          "dir": "",
+          "job": "test",
+          "programs": [
+            "cargo"
+          ],
+          "step": "Test"
+        },
+        {
+          "dir": "",
+          "job": "licenses",
+          "programs": [
+            "cargo"
+          ],
+          "step": "Audit"
+        },
+        {
+          "dir": "",
+          "job": "licenses",
+          "programs": [
+            "npx"
+          ],
+          "step": "Atlas check"
+        }
+      ],
+      "elsewhere": [],
+      "file": ".github/workflows/ci.yml",
+      "jobs": [
+        {
+          "basis": "declared",
+          "name": "test",
+          "runsOn": [
+            {
+              "labels": [
+                "windows-latest"
+              ],
+              "platform": {
+                "cpu": "x64",
+                "os": "win32"
+              }
+            }
+          ]
+        },
+        {
+          "basis": "declared",
+          "name": "codecov",
+          "runsOn": [
+            {
+              "labels": [
+                "ubuntu-latest"
+              ],
+              "platform": {
+                "cpu": "x64",
+                "libc": "glibc",
+                "os": "linux"
+              }
+            }
+          ]
+        },
+        {
+          "basis": "declared",
+          "name": "licenses",
+          "runsOn": [
+            {
+              "labels": [
+                "ubuntu-latest"
+              ],
+              "platform": {
+                "cpu": "x64",
+                "libc": "glibc",
+                "os": "linux"
+              }
+            }
+          ],
+          "setup": [
+            {
+              "ranges": [
+                {
+                  "from": "22",
+                  "range": ">=22.0.0 <23.0.0-0"
+                }
+              ],
+              "step": "5",
+              "uses": "actions/setup-node",
+              "version": "22"
+            }
+          ]
+        }
+      ],
+      "landings": [],
+      "mentions": [],
+      "name": "CI",
+      "permissions": [
+        "contents:read",
+        "id-token:write"
+      ],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "runforge",
+          "depth": 0,
+          "files": 7
+        },
+        {
+          "boundary": "runforge-core",
+          "depth": 0,
+          "files": 19
+        }
+      ],
+      "readers": [],
+      "runs": [
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/expr.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/lib.rs",
+          "runKind": "checks",
+          "via": "cargo clippy"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/parse.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/report.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/session.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/time.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/src/weigh.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "directory": true,
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge-core/tests/",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "licenses",
+          "matched": true,
+          "path": "crates/runforge/build.rs",
+          "runKind": "executes",
+          "via": "cargo audit"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/build.rs",
+          "runKind": "executes",
+          "via": "cargo clippy"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/src/app.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/src/launch.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/src/main.rs",
+          "runKind": "executes",
+          "via": "cargo clippy"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/src/sidecar.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        },
+        {
+          "job": "test",
+          "matched": true,
+          "path": "crates/runforge/src/store.rs",
+          "runKind": "executes",
+          "via": "cargo test"
+        }
+      ],
+      "runsCount": 14,
+      "secrets": [],
+      "sends": {
+        "deploysPages": false,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": false,
+        "publishesTo": [],
+        "releases": false
+      },
+      "stages": [],
+      "tests": [
+        {
+          "coverage": true,
+          "files": 17,
+          "job": "test",
+          "runner": "cargo test",
+          "step": "Test"
+        }
+      ],
+      "triggers": [
+        {
+          "event": "pull_request"
+        },
+        {
+          "branches": [
+            "main"
+          ],
+          "event": "push"
+        }
+      ],
+      "uses": [
+        "EmbarkStudios/cargo-deny-action",
+        "actions/checkout",
+        "actions/download-artifact",
+        "actions/setup-node",
+        "actions/upload-artifact",
+        "codecov/codecov-action",
+        "dtolnay/rust-toolchain",
+        "taiki-e/install-action"
+      ],
+      "usesWorkflowToken": false
+    },
+    {
+      "checksCount": 0,
+      "commands": [
+        {
+          "dir": "site",
+          "job": "build",
+          "programs": [
+            "npm"
+          ],
+          "step": "Install site dependencies"
+        },
+        {
+          "dir": "site",
+          "job": "build",
+          "programs": [
+            "npm"
+          ],
+          "step": "Build site"
+        }
+      ],
+      "elsewhere": [],
+      "file": ".github/workflows/pages.yml",
+      "jobs": [
+        {
+          "basis": "declared",
+          "name": "build",
+          "runsOn": [
+            {
+              "labels": [
+                "ubuntu-latest"
+              ],
+              "platform": {
+                "cpu": "x64",
+                "libc": "glibc",
+                "os": "linux"
+              }
+            }
+          ],
+          "setup": [
+            {
+              "ranges": [
+                {
+                  "from": "22",
+                  "range": ">=22.0.0 <23.0.0-0"
+                }
+              ],
+              "step": "1",
+              "uses": "actions/setup-node",
+              "version": "22"
+            }
+          ]
+        },
+        {
+          "basis": "declared",
+          "environment": {
+            "name": "github-pages"
+          },
+          "name": "deploy",
+          "runsOn": [
+            {
+              "labels": [
+                "ubuntu-latest"
+              ],
+              "platform": {
+                "cpu": "x64",
+                "libc": "glibc",
+                "os": "linux"
+              }
+            }
+          ]
+        }
+      ],
+      "landings": [],
+      "mentions": [],
+      "name": "Deploy site to GitHub Pages",
+      "permissions": [
+        "contents:read",
+        "id-token:write",
+        "pages:write"
+      ],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "site",
+          "depth": 0,
+          "files": 5
+        }
+      ],
+      "readers": [],
+      "runs": [
+        {
+          "job": "build",
+          "matched": true,
+          "path": "site/astro.config.mjs",
+          "runKind": "executes",
+          "via": "astro build"
+        },
+        {
+          "directory": true,
+          "job": "build",
+          "matched": true,
+          "path": "site/src/",
+          "runKind": "executes",
+          "via": "astro build"
+        }
+      ],
+      "runsCount": 2,
+      "secrets": [],
+      "sends": {
+        "deploysPages": true,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": false,
+        "publishesTo": [],
+        "releases": false
+      },
+      "stages": [],
+      "triggers": [
+        {
+          "branches": [
+            "main"
+          ],
+          "event": "push",
+          "paths": [
+            ".github/workflows/pages.yml",
+            "site/**"
+          ]
+        },
+        {
+          "event": "workflow_dispatch"
+        }
+      ],
+      "uses": [
+        "actions/checkout",
+        "actions/deploy-pages",
+        "actions/setup-node",
+        "actions/upload-pages-artifact"
+      ],
+      "usesWorkflowToken": false
+    },
+    {
+      "checksCount": 0,
+      "commands": [],
+      "elsewhere": [],
+      "file": "crates/runforge/Cargo.toml",
+      "kind": "command",
+      "landings": [],
+      "mentions": [],
+      "name": "runforge",
+      "permissions": [],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "runforge",
+          "depth": 0,
+          "files": 6
+        },
+        {
+          "boundary": "runforge-core",
+          "depth": 1,
+          "enters": {
+            "file": "crates/runforge-core/src/lib.rs",
+            "from": "crates/runforge/src/main.rs"
+          },
+          "files": 14
+        }
+      ],
+      "readers": [],
+      "runs": [
+        {
+          "path": "crates/runforge/src/main.rs",
+          "runKind": "executes"
+        }
+      ],
+      "runsCount": 1,
+      "secrets": [],
+      "sends": {
+        "deploysPages": false,
+        "dispatchesTo": [],
+        "opensIssues": false,
+        "opensIssuesOnFailure": false,
+        "opensPullRequests": false,
+        "publishes": false,
+        "publishesTo": [],
+        "releases": false
+      },
+      "stages": [],
+      "triggers": [],
+      "unshipped": true,
+      "uses": [],
+      "usesWorkflowToken": false
+    }
+  ],
+  "edges": [
+    {
+      "from": "runforge",
+      "kind": "file",
+      "to": "runforge-core"
+    }
+  ],
+  "engine": "1.24.0",
+  "generatedFrom": {
+    "commit": "c0c5042883fd40d2bd39c0b6cde793c52bc6f325",
+    "tracked": 105
+  },
+  "landings": [
+    {
+      "readers": [
+        {
+          "by": "packaging/pack-msix.ps1",
+          "call": "Copy-Item",
+          "confidence": "text"
+        }
+      ],
+      "target": "LICENSE",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        }
+      ],
+      "target": "crates/runforge",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        },
+        {
+          "by": "crates/runforge/Cargo.toml",
+          "call": "configuration",
+          "confidence": "config"
+        }
+      ],
+      "target": "crates/runforge-core",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "packaging/pack-msix.ps1",
+          "call": "Copy-Item",
+          "confidence": "text"
+        }
+      ],
+      "target": "packaging/msix",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "site/astro.config.mjs",
+          "call": "content-collection",
+          "confidence": "ast"
+        }
+      ],
+      "target": "site/src/content/docs",
+      "writers": []
+    },
+    {
+      "readers": [
+        {
+          "by": "site/astro.config.mjs",
+          "call": "autogenerate",
+          "confidence": "ast"
+        }
+      ],
+      "target": "site/src/content/docs/handbook",
+      "writers": []
+    }
+  ],
+  "overlaps": [],
+  "submodules": [],
+  "symlinks": [],
+  "testFiles": 16,
+  "unassigned": []
+}
