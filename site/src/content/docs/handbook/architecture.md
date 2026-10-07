@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-Two crates. The library never opens a window. The binary never decides that an unknown key is illegal.
+Three crates. The libraries never open a window. The binary never decides that an unknown key is illegal.
 
 ## `runforge-core`
 
@@ -28,11 +28,21 @@ The rest of the library is the instrument and the workbench. None of it calls a 
 | `weigh` | The window around each low: median, quartiles, the spread between runs, and the reference cards. |
 | `report` | The report text: the string the window shows and the string Save report writes. |
 | `ledger` | Each measured weighing, keyed by the runs' identities, for the report's earlier weighings. |
-| `expr` | The formula language: a parser with size and depth caps, and an evaluator over one run's samples. |
+| `expr` | The loss measures a formula can read from one run: the low, the window around it, and measures over a span of epochs. |
+| `bench` | RunForge's side of the workbench: it hands the open series to the `workbench` crate as runs with knobs, and keeps RunForge's memory file. |
+
+## `workbench`
+
+The workbench itself is a crate of its own, shared with ScalarScope. It knows nothing about losses or latencies. A host names its measures and computes them, and hands over its runs with their knobs.
+
+| Module | What it owns |
+| --- | --- |
+| `expr` | The formula language: a parser with size and depth caps, `knob` and arithmetic, over the host's measures. |
 | `bench` | The statistics, learned tools, hypotheses, per-folder tests, e-values, evidence across folders, e-BH, and checkpoints. |
 | `session` | One workbench session: the tool schemas per phase, the prompts, and what each tool call does. |
+| `ollama` | The loop against a local Ollama on 127.0.0.1. It refuses cloud tags and names the model and its digest. |
 
-Each module knows only what it needs. `expr` knows nothing about tools, `bench` knows nothing about chat, and `session` knows nothing about HTTP.
+Each module knows only what it needs. `expr` knows nothing about tools, `bench` knows nothing about chat, `session` knows nothing about HTTP, and `ollama` knows nothing about statistics.
 
 ## `runforge`
 

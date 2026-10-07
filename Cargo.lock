@@ -2723,6 +2723,7 @@ dependencies = [
  "rfd",
  "runforge-core",
  "serde_json",
+ "workbench",
 ]
 
 [[package]]
@@ -2732,6 +2733,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "workbench",
 ]
 
 [[package]]
@@ -4180,6 +4182,13 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "workbench"
+version = "2.0.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "writeable"

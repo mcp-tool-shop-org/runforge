@@ -20,18 +20,24 @@ mod weigh;
 
 pub use bench::{
     ALPHA, Arm, Column, Direction, Evaluation, Evidence, Experiment, FDR, Hypothesis,
-    KnobComparison, LearnedTool, Noise, Proposal, State, Verdict, board_method, compare_knob,
-    evaluate, evidence, exact_p, experiment_for, learn_tool, note_use, permutation_e, propose,
-    read_hypotheses, read_tools, reason_allowed, record, run_fingerprint, seed_noise, seeds_needed,
-    test as test_hypothesis, test_all, threshold, verdicts, wording_problem, write_hypotheses,
-    write_tools,
+    KnobComparison, LearnedTool, Noise, Proposal, State, Statement, Verdict, bench_board,
+    board_method, compare_knob, evaluate, evidence, exact_p, experiment_for, learn_tool, note_use,
+    permutation_e, propose, read_hypotheses, read_tools, reason_allowed, record, run_fingerprint,
+    seed_noise, seeds_needed, test as test_hypothesis, test_all, threshold, verdicts,
+    wording_problem, write_hypotheses, write_tools,
 };
 pub use bench::{
     Book, CHECKPOINT_EVERY, Checkpoint, lambda_for, note_new_folder, read_book, write_book,
 };
 pub use error::HistoryError;
 pub use export::{curve_csv, curve_segments, entry_json, finite_points, format_f64, list_csv};
-pub use expr::{Expr, MEASURES, Measure, canonical, parse as parse_formula};
+pub use expr::{LOSS_MEASURES, LossHost};
+pub use workbench::{Expr, Measure, canonical};
+
+/// Parse a formula over the loss measures.
+pub fn parse_formula(text: &str) -> Result<Expr, String> {
+    workbench::parse(text, LOSS_MEASURES)
+}
 pub use history::{
     EvalSummary, History, HyperDiff, LossSample, RunEntry, hyperparameter_diffs, load_bytes,
     load_folder, load_text, pick_best_loss,
@@ -52,5 +58,6 @@ pub use series::{
 };
 pub use session::{MAX_CALLS, MAX_CALLS_PER_ROUND, MAX_ROUNDS, NOTE_LIMIT, Phase, Step, Workbench};
 pub use weigh::{Card, Neighborhood, Separation, Spread, Weighing, spread, weigh};
+pub use workbench::{BenchReply, start_bench, start_bench_on};
 
 pub const VERSION: &str = "2.0.0";

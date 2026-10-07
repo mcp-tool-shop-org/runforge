@@ -327,7 +327,7 @@ function Add-Notices([string]$Stage) {
     $lines.Add('')
     $seen = @{}
     foreach ($pkg in $meta.packages) {
-        if ($pkg.name -eq 'runforge' -or $pkg.name -eq 'runforge-core') { continue }
+        if ($pkg.name -in @('runforge', 'runforge-core', 'workbench')) { continue }
         $key = '{0} {1}' -f $pkg.name, $pkg.version
         if ($seen.ContainsKey($key)) { continue }
         $seen[$key] = $true

@@ -10,7 +10,7 @@
 
 use serde_json::Value;
 
-use crate::bench::{Book, Hypothesis, LearnedTool};
+use crate::bench::{Book, Hypothesis, LearnedTool, Statement};
 use crate::ledger::{Ledger, Weighed};
 use crate::series::{
     Board, Reading, Series, format_measure, read_board, recipe_keys, recipe_label, recipe_text,
