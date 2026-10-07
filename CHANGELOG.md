@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+The workbench moved into a crate of its own, `crates/workbench`, so ScalarScope can share it. The formula language, the hypotheses and their evidence, the session and the local-model loop live there behind a small interface: a host hands over its runs with their knobs and names and computes its own measures. RunForge's loss measures, its recipes and its memory file stay in `runforge-core`, and the window behaves as before. The loop now reads Ollama's digest for the model it chose, and the status line shows it beside the model's name. Every RunForge test moved with the code it tests and still passes.
+
 The README, the landing page, and the handbook describe the instrument, the report and the workbench; the handbook gains a workbench page and a reference of hypothesis states, verdicts and limits. Coverage is 93.8% of lines, with each pull request's new lines also held to 90%. No package has been submitted to Partner Center.
 
 The workbench sits under Ask in the sidecar, so a session's calls, the formula box and the model's note appear where you pressed the button; learned tools fold away under a count. Paths in the window show your home folder as `~`, and opening a series folder clears an old status line. A run plan reads "a second value of your choice", and a tool used once says so.

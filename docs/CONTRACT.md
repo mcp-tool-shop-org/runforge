@@ -152,6 +152,7 @@ Measured on this machine on 2026-10-03: `rustc 1.98.1 (48a229cea 2026-09-01)`.
 | `edition` | `2024` |
 | `rust-version` | `1.98.1` |
 | Resolver | edition 2024 default (`"3"`), so the lock prefers MSRV-compatible versions |
+| `workbench` | library shared with ScalarScope, `serde_json` 1 with `float_roundtrip`, nothing else |
 | `runforge-core` | library, `thiserror` 2, `serde` 1 with `derive`, `serde_json` 1 with `float_roundtrip` |
 | `runforge` | binary, `anyhow` 1, `eframe` 0.36, `egui_plot` 0.37, `rfd` 0.15 |
 

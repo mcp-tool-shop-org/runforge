@@ -11,12 +11,13 @@ use eframe::egui::{self, Color32, RichText};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use runforge_core::{
     Board, Book, EvalSummary, History, HistoryError, HyperDiff, Hypothesis, LearnedTool, Ledger,
-    LossSample, Prefs, Reading, RunEntry, Step, Theme, VERSION, Workbench, board_method,
-    comparison_report_full, curve_csv, curve_segments, earlier_readings, entry_json, evaluate,
-    finite_points, format_f64, hyperparameter_diffs, known_runs, ledger_for, list_csv, load_folder,
-    load_series_folder, note_new_folder, note_use, read_board, read_book, read_hypotheses,
-    read_prefs, read_tools, recall, record, record_weighing, remember, report_file_name, test_all,
-    weighed_now, write_book, write_hypotheses, write_prefs, write_tools,
+    LossSample, Prefs, Reading, RunEntry, Step, Theme, VERSION, Workbench, bench_board,
+    board_method, comparison_report_full, curve_csv, curve_segments, earlier_readings, entry_json,
+    evaluate, finite_points, format_f64, hyperparameter_diffs, known_runs, ledger_for, list_csv,
+    load_folder, load_series_folder, note_new_folder, note_use, read_board, read_book,
+    read_hypotheses, read_prefs, read_tools, recall, record, record_weighing, remember,
+    report_file_name, test_all, weighed_now, write_book, write_hypotheses, write_prefs,
+    write_tools,
 };
 
 use crate::instrument::{InstrumentAction, SidecarView, draw_instrument, report_date};
@@ -301,7 +302,7 @@ impl RunForgeApp {
                 let today = report_date().unwrap_or_default();
                 self.ask = Some(start_bench(
                     Workbench::new(
-                        board.clone(),
+                        bench_board(&board),
                         self.tools.clone(),
                         self.hypotheses.clone(),
                         &today,
@@ -346,10 +347,16 @@ impl RunForgeApp {
         match rx.try_recv() {
             Ok(BenchReply::Done {
                 model,
+                digest,
                 bench,
                 stopped,
             }) => {
                 self.ask = None;
+                // The digest names the weights that ran, not just the tag.
+                let model = match digest {
+                    Some(digest) => format!("{model} ({})", &digest[..digest.len().min(12)]),
+                    None => model,
+                };
                 self.keep_session(&model, &bench, &stopped);
             }
             Ok(BenchReply::Absent(text)) => {
@@ -2230,8 +2237,13 @@ mod tests {
         let board = app.series.clone().unwrap();
 
         // A session as the model loop would hand it back.
-        let mut bench = runforge_core::Workbench::new(board, Vec::new(), Vec::new(), "2026-10-06")
-            .knowing(vec!["an earlier run".to_string()]);
+        let mut bench = runforge_core::Workbench::new(
+            runforge_core::bench_board(&board),
+            Vec::new(),
+            Vec::new(),
+            "2026-10-06",
+        )
+        .knowing(vec!["an earlier run".to_string()]);
         bench.call("measure", &serde_json::json!({"formula": "low"}));
         bench.call(
             "learn_tool",
@@ -2283,7 +2295,7 @@ mod tests {
 
         // A note that crossed the fence is dropped and the pane says so.
         let mut dropped = runforge_core::Workbench::new(
-            app.series.clone().unwrap(),
+            runforge_core::bench_board(&app.series.clone().unwrap()),
             Vec::new(),
             Vec::new(),
             "2026-10-06",

@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use runforge_core::{
-    Board, Direction, Proposal, Sample, Series, State, compare_knob, evaluate, exact_p,
+    Board, Direction, Proposal, Sample, Series, State, Statement, compare_knob, evaluate, exact_p,
     experiment_for, learn_tool, note_use, propose, read_hypotheses, read_tools, reason_allowed,
     recall, record, record_weighing, remember, seed_noise, seeds_needed, test_all, test_hypothesis,
     weighed_now, write_hypotheses, write_tools,
