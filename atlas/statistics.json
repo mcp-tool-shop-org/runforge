@@ -86,15 +86,13 @@
     },
     {
       "breakage": {
-        "coChangesOnly": [
-          "runforge-core"
-        ],
+        "coChangesOnly": [],
         "collapsed": false,
         "confidence": "low",
         "importsAndCoChanges": [],
         "importsOnly": []
       },
-      "cohesion": 0,
+      "cohesion": null,
       "cohesionDropped": false,
       "confidence": "low",
       "highWater": null,
@@ -107,17 +105,17 @@
         "coChangesOnly": [],
         "collapsed": false,
         "confidence": "low",
-        "importsAndCoChanges": [
+        "importsAndCoChanges": [],
+        "importsOnly": [
           "runforge"
-        ],
-        "importsOnly": []
+        ]
       },
-      "cohesion": 0.892054,
+      "cohesion": 1,
       "cohesionDropped": false,
       "confidence": "low",
       "highWater": null,
       "name": "runforge-core",
-      "qualifyingSourceCommits": 13,
+      "qualifyingSourceCommits": 15,
       "rebaseline": null
     },
     {
@@ -183,7 +181,7 @@
       "confidence": "low",
       "highWater": null,
       "name": "workbench",
-      "qualifyingSourceCommits": 1,
+      "qualifyingSourceCommits": 4,
       "rebaseline": null
     }
   ],
@@ -196,8 +194,8 @@
         "path": ".cargo/audit.toml"
       },
       {
-        "commits": 5,
-        "lines": 93,
+        "commits": 6,
+        "lines": 99,
         "path": ".github/workflows/ci.yml"
       },
       {
@@ -211,8 +209,8 @@
         "path": ".gitignore"
       },
       {
-        "commits": 21,
-        "lines": 73,
+        "commits": 27,
+        "lines": 91,
         "path": "CHANGELOG.md"
       },
       {
@@ -291,28 +289,28 @@
         "path": "SHIP_GATE.md"
       },
       {
-        "commits": 1,
-        "lines": 91,
+        "commits": 3,
+        "lines": 250,
         "path": "atlas/README.md"
       },
       {
-        "commits": 1,
-        "lines": 42,
+        "commits": 3,
+        "lines": 94,
         "path": "atlas/boundaries.yaml"
       },
       {
-        "commits": 1,
-        "lines": 304,
+        "commits": 3,
+        "lines": 1040,
         "path": "atlas/page.json"
       },
       {
-        "commits": 1,
-        "lines": 794,
+        "commits": 3,
+        "lines": 1940,
         "path": "atlas/statistics.json"
       },
       {
-        "commits": 1,
-        "lines": 2167,
+        "commits": 3,
+        "lines": 5688,
         "path": "atlas/structure.json"
       },
       {
@@ -381,8 +379,8 @@
         "path": "crates/runforge-core/src/series.rs"
       },
       {
-        "commits": 10,
-        "lines": 3509,
+        "commits": 14,
+        "lines": 3573,
         "path": "crates/runforge-core/src/session.rs"
       },
       {
@@ -409,6 +407,11 @@
         "commits": 3,
         "lines": 540,
         "path": "crates/runforge-core/tests/evidence.rs"
+      },
+      {
+        "commits": 4,
+        "lines": 294,
+        "path": "crates/runforge-core/tests/fixtures/tool_specs.json"
       },
       {
         "commits": 1,
@@ -471,13 +474,13 @@
         "path": "crates/workbench/Cargo.toml"
       },
       {
-        "commits": 3,
-        "lines": 4464,
+        "commits": 7,
+        "lines": 4636,
         "path": "crates/workbench/src/bench.rs"
       },
       {
-        "commits": 3,
-        "lines": 501,
+        "commits": 7,
+        "lines": 521,
         "path": "crates/workbench/src/board.rs"
       },
       {
@@ -491,24 +494,29 @@
         "path": "crates/workbench/src/format.rs"
       },
       {
-        "commits": 3,
-        "lines": 111,
+        "commits": 5,
+        "lines": 127,
         "path": "crates/workbench/src/lib.rs"
       },
       {
-        "commits": 3,
-        "lines": 2022,
+        "commits": 5,
+        "lines": 2028,
         "path": "crates/workbench/src/ollama.rs"
       },
       {
-        "commits": 3,
-        "lines": 1902,
+        "commits": 9,
+        "lines": 1954,
         "path": "crates/workbench/src/session.rs"
       },
       {
         "commits": 3,
         "lines": 306,
         "path": "crates/workbench/src/testing.rs"
+      },
+      {
+        "commits": 6,
+        "lines": 556,
+        "path": "crates/workbench/tests/fence.rs"
       },
       {
         "commits": 1,
@@ -796,9 +804,9 @@
     "level": "low",
     "reason": "fewer than 25 source files reach 10 revisions in the window"
   },
-  "generatedAt": "2026-10-07T01:23:44.566Z",
+  "generatedAt": "2026-11-11T22:38:38.084Z",
   "generatedFrom": {
-    "commit": "8d5955e254d0e3ab79ddcd482379710daacc848d"
+    "commit": "ca3aae27d22558f4614bee436704c63dcb0cd663"
   },
   "pairs": [
     {
@@ -832,9 +840,9 @@
     {
       "a": "crates/runforge-core/src/lib.rs",
       "b": "crates/runforge-core/src/session.rs",
-      "either": 9,
+      "either": 11,
       "shared": 6,
-      "strength": 0.666667
+      "strength": 0.545455
     },
     {
       "a": "crates/runforge-core/src/lib.rs",
@@ -842,31 +850,10 @@
       "either": 10,
       "shared": 5,
       "strength": 0.5
-    },
-    {
-      "a": "crates/runforge-core/src/report.rs",
-      "b": "crates/runforge-core/src/session.rs",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
-    },
-    {
-      "a": "crates/runforge-core/src/session.rs",
-      "b": "crates/runforge-core/tests/bench.rs",
-      "either": 8,
-      "shared": 4,
-      "strength": 0.5
-    },
-    {
-      "a": "crates/runforge-core/src/session.rs",
-      "b": "crates/runforge/src/sidecar.rs",
-      "either": 7,
-      "shared": 4,
-      "strength": 0.571429
     }
   ],
   "parameters": {
-    "appliedChangesetLimit": 29.75,
+    "appliedChangesetLimit": 30.25,
     "changeset": 50,
     "changesetFraction": 0.25,
     "cohesionDrop": 0.2,
@@ -875,16 +862,16 @@
     "floor": "fallen",
     "floorHeld": false,
     "floorTrigger": "revision-depth",
-    "headDate": "2026-10-06T21:22:45-04:00",
-    "inScopeFiles": 119,
+    "headDate": "2026-10-06T19:39:13-07:00",
+    "inScopeFiles": 121,
     "pinnedStart": null,
     "priorFloor": "fallen",
-    "qualifyingCommits": 34,
+    "qualifyingCommits": 38,
     "qualifyingMinimum": 30,
     "revisions": 5,
     "shared": 10,
     "sharedFloorUsed": 3,
-    "since": "2026-04-10T01:22:45.000Z",
+    "since": "2026-04-10T02:39:13.000Z",
     "sourceExtensions": [
       ".js",
       ".mjs",

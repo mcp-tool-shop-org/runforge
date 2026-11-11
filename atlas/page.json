@@ -40,66 +40,30 @@
   ],
   "changes": {
     "fileCounts": {
-      "added": 10,
-      "changed": 18,
+      "added": 2,
+      "changed": 8,
       "moved": 0,
-      "parts": 7,
-      "removed": 1
+      "parts": 4,
+      "removed": 0
     },
     "items": [
       {
-        "kind": "import-added",
-        "sentence": "runforge-core now imports workbench.",
-        "subjects": [
-          "runforge-core",
-          "workbench"
-        ]
-      },
-      {
-        "kind": "door",
-        "sentence": "CI now also runs crates/workbench/src/board.rs, crates/workbench/src/format.rs, crates/workbench/src/ollama.rs and 1 more.",
-        "subjects": [
-          ".github/workflows/ci.yml",
-          "crates/workbench/src/board.rs",
-          "crates/workbench/src/format.rs",
-          "crates/workbench/src/ollama.rs",
-          "crates/workbench/tests/"
-        ]
-      },
-      {
-        "kind": "door",
-        "sentence": "CI now also checks crates/workbench/src/lib.rs.",
-        "subjects": [
-          ".github/workflows/ci.yml",
-          "crates/workbench/src/lib.rs"
-        ]
-      },
-      {
         "kind": "landing",
-        "sentence": "crates/workbench/ is now read by Cargo.toml, crates/runforge-core/Cargo.toml and crates/runforge/Cargo.toml.",
+        "sentence": "crates/runforge-core/tests/fixtures/tool_specs.json is now read by crates/runforge-core/src/session.rs.",
         "subjects": [
-          "crates/workbench/",
-          "Cargo.toml",
-          "crates/runforge-core/Cargo.toml",
-          "crates/runforge/Cargo.toml"
-        ]
-      },
-      {
-        "kind": "part",
-        "sentence": "workbench is a new part, drawn from `crates/workbench/**`.",
-        "subjects": [
-          "workbench"
+          "crates/runforge-core/tests/fixtures/tool_specs.json",
+          "crates/runforge-core/src/session.rs"
         ]
       },
       {
         "kind": "counts",
-        "sentence": "10 files added, 1 removed and 18 changed content, across 7 parts.",
+        "sentence": "2 files added and 8 changed content, across 4 parts.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "c0c5042883fd40d2bd39c0b6cde793c52bc6f325",
-      "generatedAt": "2026-10-07T01:12:39.639Z"
+      "commit": "8d5955e254d0e3ab79ddcd482379710daacc848d",
+      "generatedAt": "2026-10-07T01:23:44.566Z"
     },
     "unchanged": false
   },
@@ -108,21 +72,6 @@
       "a": "crates/runforge-core/src/bench.rs",
       "b": "crates/runforge-core/tests/bench.rs",
       "either": 7,
-      "partLabels": [
-        "runforge-core",
-        "runforge-core"
-      ],
-      "parts": [
-        "runforge-core",
-        "runforge-core"
-      ],
-      "relation": "inside",
-      "shared": 6
-    },
-    {
-      "a": "crates/runforge-core/src/lib.rs",
-      "b": "crates/runforge-core/src/session.rs",
-      "either": 9,
       "partLabels": [
         "runforge-core",
         "runforge-core"
@@ -150,9 +99,9 @@
       "shared": 4
     },
     {
-      "a": "crates/runforge-core/src/report.rs",
-      "b": "crates/runforge-core/src/session.rs",
-      "either": 7,
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge-core/src/report.rs",
+      "either": 9,
       "partLabels": [
         "runforge-core",
         "runforge-core"
@@ -162,22 +111,37 @@
         "runforge-core"
       ],
       "relation": "inside",
-      "shared": 4
+      "shared": 5
     },
     {
-      "a": "crates/runforge-core/src/session.rs",
-      "b": "crates/runforge/src/sidecar.rs",
-      "either": 7,
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge-core/src/session.rs",
+      "either": 11,
       "partLabels": [
         "runforge-core",
-        "runforge"
+        "runforge-core"
       ],
       "parts": [
         "runforge-core",
-        "runforge"
+        "runforge-core"
       ],
-      "relation": "b-imports-a",
-      "shared": 4
+      "relation": "inside",
+      "shared": 6
+    },
+    {
+      "a": "crates/runforge-core/src/lib.rs",
+      "b": "crates/runforge-core/tests/bench.rs",
+      "either": 10,
+      "partLabels": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "parts": [
+        "runforge-core",
+        "runforge-core"
+      ],
+      "relation": "inside",
+      "shared": 5
     }
   ],
   "changesTogetherNote": [
@@ -185,9 +149,9 @@
     "Window: 180 days; a pair counts from 3 shared commits, since 1 source file reaches 10 revisions; the floor rises to 10 when 25 do."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "8d5955e254d0e3ab79ddcd482379710daacc848d",
+  "commit": "ca3aae27d22558f4614bee436704c63dcb0cd663",
   "defaultBranch": "main",
-  "derived": "11 parts, mostly Rust (34 files), CSS (2), PowerShell (2), TypeScript (2), Astro (1) and JavaScript (1). Work enters through 3 doors; CI and runforge each reach 3 parts, and CI is followed because a pull request goes through it. It deploys a site to GitHub Pages. runforge is a command built from crates/runforge (nothing ships it).",
+  "derived": "11 parts, mostly Rust (35 files), CSS (2), PowerShell (2), TypeScript (2), Astro (1) and JavaScript (1). Work enters through 3 doors; CI and runforge each reach 3 parts, and CI is followed because a pull request goes through it. It deploys a site to GitHub Pages. runforge is a command built from crates/runforge (nothing ships it).",
   "doors": [
     {
       "checks": [
@@ -215,7 +179,7 @@
         {
           "boundary": "workbench",
           "depth": 0,
-          "files": 9
+          "files": 10
         }
       ],
       "runs": [
@@ -238,7 +202,7 @@
         "crates/workbench/tests/"
       ],
       "runsCount": 17,
-      "runsMore": 17,
+      "runsMore": 18,
       "sends": [
         "uploads coverage to Codecov"
       ],
@@ -411,9 +375,9 @@
       "to": "workbench"
     }
   ],
-  "engine": "1.24.0",
+  "engine": "1.26.0",
   "generated": [],
-  "generatedAt": "2026-10-07T01:23:44.566Z",
+  "generatedAt": "2026-11-11T22:38:38.084Z",
   "limits": [
     "3 writes and 1 read use paths built at run time and are not named here.",
     "5 writes and 6 reads go to a path their caller passes, not to this repository.",
@@ -450,12 +414,13 @@
   "startReason": "This path follows runforge (a command built from crates/runforge, which nothing ships) from its entry, since CI runs only tests, scripts that import no code here and checks.",
   "summary": "A Windows instrument for fine-tuning runs: it draws every stored sample from a folder of run records, writes a report, and gives a local model a workbench. A Rust core library and a workbench crate shared with ScalarScope, with an egui desktop app on top.",
   "summaryFrom": "person",
-  "testFiles": 19,
+  "testFiles": 21,
   "testedBy": {
     "runforge": 5,
     "runforge-core": 10,
-    "workbench": 8
+    "workbench": 9
   },
+  "testedCodeParts": 3,
   "testedInside": [
     "runforge"
   ],
