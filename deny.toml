@@ -2,6 +2,14 @@
 # The eframe 0.36 graph needs more. Those stay per-crate exceptions.
 # The global list is not widened. MPL-2.0 is not allowed.
 
+# Audit what we ship. RunForge ships for Windows only (Microsoft Store), so the
+# dependency graph cargo-deny checks is the x86_64-pc-windows-msvc graph. Crates
+# reached only on Linux (winit's Wayland decorations, accesskit's AT-SPI bridge
+# over zbus) are not in it. If a Linux build is ever shipped, add its triple here,
+# and the Linux-only advisories must then be fixed at the root, not ignored.
+[graph]
+targets = [{ triple = "x86_64-pc-windows-msvc" }]
+
 [licenses]
 allow = ["MIT", "Apache-2.0", "Unlicense", "BSD-1-Clause", "0BSD", "Zlib"]
 confidence-threshold = 0.95
@@ -41,11 +49,6 @@ exceptions = [
 ]
 
 [advisories]
-ignore = [
-    # ttf-parser has no safe upgrade. winit pulls it through sctk-adwaita
-    # for Linux window decorations. RunForge does not call it.
-    { id = "RUSTSEC-2026-0192", reason = "unmaintained ttf-parser, transitive through winit, no safe upgrade" },
-]
 
 [bans]
 multiple-versions = "warn"
