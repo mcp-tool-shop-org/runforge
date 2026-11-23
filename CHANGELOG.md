@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Dependency lockfile bump (`Cargo.lock`): `url` 2.5.8 -> 2.5.9 (with `form_urlencoded` 1.2.2 -> 1.2.3) for RUSTSEC-2026-0592.
+
 Workbench wording fixes, found in ScalarScope's live sessions:
 - A recorded hypothesis read "On these runs it is passes its test on these runs alone". Each state now has its own sentence, such as "It passes its test on these runs alone." RunForge's sidecar shows these sentences too, so this is a bug fix to RunForge's wording.
 - The tool schema's description of the closing note now asks the model to use the program's words when it reports a state. A model had called a hypothesis "supported" when it had only passed on one set of runs. RunForge's schema snapshot changes in exactly that line.
